@@ -1,5 +1,5 @@
 # openrecipes database
-resources/20170107-061401-recipeitems.json*
+resources/*.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
