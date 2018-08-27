@@ -102,11 +102,15 @@ def get_ingredients():
                     for elem3 in elem2.split(" of "):
                         for elem4 in elem3.split(" for "):
                             for elem5 in elem4.split(";"):
-                                for tag in pos_tag(elem5.split()):
-                                    if re.match("NN((S|PS*))*", tag[1]):
-                                        l_ing2.add(elem5.strip())
-    print(len(l_ing2))
-    # print(l_ing2)
+                                for elem6 in elem5.split("!"):
+                                    for tag in pos_tag(elem6.split()):
+                                        if re.match("NN((S|PS*))*", tag[1]):
+                                            l_ing2.add(re.sub("^" + units + "\s+", "", elem6.strip()))
+    # print(len(l_ing2))
+    print(l_ing2)
+
+    # TODO
+    # add spelling corrections to ingredients before removing non-NN's
 
 if __name__ == '__main__':
     get_recipes()
@@ -114,4 +118,4 @@ if __name__ == '__main__':
     app.run()
 
 # nltk.download('averaged_perceptron_tagger')
-# 129112
+# 125757
