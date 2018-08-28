@@ -81,7 +81,7 @@ def get_ingredients():
     quantity_filter = "([\d]+\s*x\s+)*(((" + num_frac\
                                            + "|\s+to\s+)\s*)+("\
                                            + units\
-                                           + "(\s+(of\s+)*|\s*[\u2215\u2044\u2010-\u2015\u002c-\u002f]s*))*)+"
+                                           + "(\s+(of\s+)*|\s*[\u2215\u2044\u2010-\u2015\u002c-\u002f]\s*))*)+"
     l_ing = set()
     for fname in listdir(resdir):
         if not isfile(resdir + fname) or not fname.endswith(".json"):
@@ -117,4 +117,4 @@ if __name__ == '__main__':
     app.run()
 
 # nltk.download('averaged_perceptron_tagger')
-# 54838
+# 54837
