@@ -77,8 +77,11 @@ def get_ingredients():
     units = ""
     with open(resdir + "units", "r") as f:
         units = "(" + "|".join([line.rstrip() for line in f]) + ")"
-    num_frac = "[\u2189\u2150-\u215f\u00bc-\u00be\d\.\-\–\/]"
-    quantity_filter = "([\d]+\s*x\s+)*(((" + num_frac + "|\s+to\s+)\s*)+("+ units + "(\s+(of\s+)*|\s*[\,\.\-\–\/]s*))*)+"
+    num_frac = "[\u2215\u2189\u2150-\u215f\u2044\u2010-\u2015\u00bc-\u00be\u002d-\u0039]"
+    quantity_filter = "([\d]+\s*x\s+)*(((" + num_frac\
+                                           + "|\s+to\s+)\s*)+("\
+                                           + units\
+                                           + "(\s+(of\s+)*|\s*[\u2215\u2044\u2010-\u2015\u002c-\u002f]s*))*)+"
     l_ing = set()
     for fname in listdir(resdir):
         if not isfile(resdir + fname) or not fname.endswith(".json"):
@@ -96,21 +99,17 @@ def get_ingredients():
 
     l_ing2 = set()
     for ing in l_ing:
-        for elem in ing.split(","):
-            for elem1 in elem.split(" or "):
-                for elem2 in elem1.split(" and "):
-                    for elem3 in elem2.split(" of "):
-                        for elem4 in elem3.split(" for "):
-                            for elem5 in elem4.split(";"):
-                                for elem6 in elem5.split("!"):
-                                    for tag in pos_tag(elem6.split()):
-                                        if re.match("NN((S|PS*))*", tag[1]):
-                                            l_ing2.add(re.sub("^" + units + "\s+", "", elem6.strip()))
-    # print(len(l_ing2))
+        for elem in re.split("\u0021|\u0025|[\u002a-\u002c\u003a-\u003b]|\u007e|\s+(or|and|of|for)\s+|&amp", ing):
+            # TODO add spelling corrections to ingredients before removing non-NN's
+            if not elem:
+                continue
+            s = ""
+            for tag in pos_tag(elem.split()):
+                if re.match("NNS*", tag[1]) and not re.match("^" + units + "$", tag[0]):
+                    s += tag[0] + " "
+            l_ing2.add(s.strip())
     print(l_ing2)
-
-    # TODO
-    # add spelling corrections to ingredients before removing non-NN's
+    print(len(l_ing2))
 
 if __name__ == '__main__':
     get_recipes()
@@ -118,4 +117,4 @@ if __name__ == '__main__':
     app.run()
 
 # nltk.download('averaged_perceptron_tagger')
-# 125757
+# 54838
