@@ -1,9 +1,6 @@
 # openrecipes database
 resources/*.json
 
-# symspellpy spell checker
-symspellpy/
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

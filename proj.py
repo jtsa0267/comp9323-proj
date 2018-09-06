@@ -1,5 +1,7 @@
+from bs4 import BeautifulSoup
 from flask import Flask, request, Response
-from os.path import dirname, realpath
+from os.path import dirname, isfile, realpath
+from requests import get
 
 app = Flask(__name__)
 resdir = dirname(realpath(__file__)) + "/resources/"
@@ -8,12 +10,45 @@ resdir = dirname(realpath(__file__)) + "/resources/"
 def greet():
     return "Hi!"
 
+def get_ingredient_refence():
+    from textblob import TextBlob
+
+    fname = "ing_list"
+    if isfile(resdir + fname):
+        return
+    oxfordreference_base_url = "http://www.oxfordreference.com/view/10.1093/acref/9780199234875.001.0001/acref-9780199234875"
+    tag_filter = {"class" : "contentItem oxencycl-entry locked hasCover chunkResult hi-visible py-3 border-top flex flex-row"}
+    i, tmp = 1, []
+    while True:
+        soup = BeautifulSoup(get(oxfordreference_base_url + "?page=" + str(i) + "&pageSize=100").text, "lxml")
+        l = soup.find_all("div", tag_filter)
+        if not l:
+            break
+        for ing in l:
+            c = ing.h2.a.contents
+            if len(c) == 1:
+                cs = c[0].split(",")
+                ws = []
+                if len(cs) > 2:
+                    for cc in cs:
+                        ws.append(cc.lower().strip())
+                elif len(cs) == 2:
+                    ws.append((cs[1].strip() + " " + cs[0].strip()).lower())
+                else:
+                    ws.append(cs[0].lower().strip())
+                for w in ws:
+                    if not w.startswith("free "):
+                        tb = TextBlob(w)
+                        tmp.append(' '.join(tb.words[: -1]) + " " + tb.words[-1].singularize())
+        i += 1
+    with open(resdir + fname, "w") as f:
+        for t in sorted(tmp):
+            f.writelines(t + "\n")
+
 def get_recipes():
     from bs4 import BeautifulSoup
     from datetime import datetime
     from os import makedirs
-    from os.path import exists, isfile
-    from requests import get
     from time import time
 
     def get_openrecipes():
@@ -62,40 +97,42 @@ def get_recipes():
             with open(resdir + fname, "a") as f:
                 f.write(str(d).replace("'", "\"") + "\n")
 
-    if not exists(resdir):
-        makedirs(resdir)
     get_openrecipes()
     get_chowdown()
 
 def get_ingredients():
     from json import loads
-    from nltk import PorterStemmer
-    from nltk.tag import pos_tag
+    from nltk.corpus import wordnet
     from nltk.tokenize import word_tokenize
     from os import listdir
     from os.path import isfile
-    from symspellpy.symspellpy import SymSpell, Verbosity
+    from textblob import TextBlob
     import re
 
-    def symspell_correction(ing_str):
+    def symspell_correction(misspelled):
+        from symspellpy import SymSpell, Verbosity
+
         sym_spell = SymSpell(83000, 2)
-        dictionary_path = dirname(realpath(__file__)) + "/symspellpy/frequency_dictionary_en_82_765.txt"
+        dictionary_path = resdir + "frequency_dictionary_en_82_765.txt"
         if not sym_spell.load_dictionary(dictionary_path, 0, 1):
             return ""
-        suggestions = sym_spell.lookup_compound(ing_str, 1)
-        return sorted(suggestions, key = lambda x: x.count, reverse = False)[0].term
+        suggestions = sym_spell.lookup(misspelled, Verbosity.CLOSEST, 2)
+        if suggestions:
+            return sorted(suggestions, key = lambda x: x.count, reverse = True)[0].term
+        return sorted(sym_spell.lookup_compound(misspelled, 2),\
+                      key = lambda x: x.count,\
+                      reverse = True)[0].term
 
-    units_regex, units_set, all_set, l_ing = "", set(), set(), set()
+    units_regex, units_set, l_ing, ings = "", set(), set(), set()
     with open(resdir + "units", "r") as f:
         tmp = [line.rstrip() for line in f]
         units_regex = re.sub("(\.|\#)", r"\\\1", "|".join(tmp))
         units_set = set(tmp)
-    with open(resdir + "states", "r") as f:
-        all_set = set([line.rstrip() for line in f]).union(units_set)
     quantity_filter = "[\u2150-\u215e\u00bc-\u00be\u0030-\u0039]\s*("\
                           + units_regex + ")*(\s*\)\s*of\s+|\s+of\s+|\s*\)\s*|\s+)"\
                           + "([\u24C7\u2122\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u01bf\u01cd-\u02af\u0061-\u007a\ \-]{2,})"
-    descriptor_filter = "(^|\s+)[a-z]+([\u002d\u2010-\u2015][a-z]+)+($|\s+)"
+    with open(resdir + "ing_list", "r") as f:
+        ings = set([line.strip() for line in f])
     for fname in listdir(resdir):
         if not isfile(resdir + fname) or not fname.endswith(".json"):
             continue
@@ -106,42 +143,45 @@ def get_ingredients():
                     ing = re.findall(quantity_filter, ing)
                     if not ing or len(ing) > 1:
                         continue
-                    # ing = re.sub("(^|\s+)[a-z]+\-[a-z]+($|\s+)", " ", ing)
-                    # ing = symspell_correction(re.sub("^\s*x\s+", "", ing[0][-1].strip()))
-                    ing = re.sub("^\s*(x|X)\s+", "", ing[0][-1].strip())
-                    if not ing:
-                        continue
-                    for elem in re.split("\s+(and|or|with|in)\s+", ing):
-                        s, j, tmp = "", -1, pos_tag(word_tokenize(elem))
-                        for i, tag in enumerate(tmp):
-                            if re.match("NNS*", tag[1]) and tag[0] not in all_set:
-                                j = i
-                                break
-                        if j != -1:
-                            if j != 0 and tmp[j - 1][1] == "JJ" and tmp[j - 1][0] not in all_set\
-                                      and not re.match(descriptor_filter, tmp[j - 1][0][0]):
-                                s = tmp[j - 1][0]
-                            while tmp[j][1] == "NN" or tmp[j][1] == "NNS":
-                                if tmp[j][0] in all_set or re.match(descriptor_filter, tmp[j][0]):
-                                    j += 1
-                                    if j == len(tmp):
-                                        break
-                                    else:
-                                        continue
-                                s += " " + str(PorterStemmer().stem(tmp[j][0]))
-                                j += 1
-                                if j == len(tmp):
+                    for elem in re.split("\s+(and|or|with|in)\s+", ing[0][-1].strip()):
+                        s, tokens = "", reversed(word_tokenize(elem))
+                        for i, token in enumerate(tokens):
+                            token = token.rstrip()
+                            if not token or re.match("^[a-z]+([\u002d\u2010-\u2015][a-z]+)+$", token):
+                                continue
+                            # if token not in ings and not wordnet.synsets(token):
+                            #     token = symspell_correction(token)
+                            if i == 0:
+                                token = TextBlob(token).words
+                                if not token:
+                                    continue
+                                token = token[0].singularize()
+                            if token not in ings:
+                                continue
+                            else:
+                                s = token
+                            for j in range(i + 1, len(list(tokens))):
+                                tmp = " ".join(reversed(list(tokens)[i + 1 : j + 1]))
+                                if not tmp + " " + s in ings:
+                                    s = " ".join(reversed(list(tokens)[i + 1 : j])) + " " + s
                                     break
-                        if s.strip() and len(s.strip()) > 1:
+                            break
+                        s = s.strip()
+                        if s and len(s) > 2:
                             l_ing.add(s.strip())
-
     print(l_ing)
     print(len(l_ing))
 
 if __name__ == '__main__':
+    from os.path import exists
+
+    if not exists(resdir):
+        makedirs(resdir)
+    get_ingredient_refence()
+    # exit()
     get_recipes()
     get_ingredients()
     app.run()
 
 # nltk.download('punkt')
-# 23488
+# 1137
