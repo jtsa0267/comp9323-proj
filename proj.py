@@ -1,7 +1,10 @@
 from bs4 import BeautifulSoup
 from flask import Flask, request, Response
 from os.path import dirname, isfile, realpath
+from os.path import exists
 from requests import get
+import pymongo
+from pymongo import MongoClient
 
 app = Flask(__name__)
 resdir = dirname(realpath(__file__)) + "/resources/"
@@ -9,6 +12,19 @@ resdir = dirname(realpath(__file__)) + "/resources/"
 @app.route("/", methods=['Get'])
 def greet():
     return "Hi!"
+
+def connect_db():
+    DB_NAME = "comp9323"
+    DB_HOST = "ds251112.mlab.com"
+    DB_PORT = 51112
+    DB_USER = "admin"
+    DB_PASS = "admin18"
+    pass
+
+    connection = MongoClient(DB_HOST, DB_PORT)
+    db = connection[DB_NAME]
+    db.authenticate(DB_USER, DB_PASS)
+    # print(db.collection_names())
 
 def get_ingredient_refence():
     from textblob import TextBlob
@@ -131,12 +147,12 @@ def get_ingredients():
     quantity_filter = "[\u2150-\u215e\u00bc-\u00be\u0030-\u0039]\s*("\
                           + units_regex + ")*(\s*\)\s*of\s+|\s+of\s+|\s*\)\s*|\s+)"\
                           + "([\u24C7\u2122\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u01bf\u01cd-\u02af\u0061-\u007a\ \-]{2,})"
-    with open(resdir + "ing_list", "r") as f:
+    with open(resdir + "ing_list", "r", encoding='utf-8') as f:
         ings = set([line.strip() for line in f])
     for fname in listdir(resdir):
         if not isfile(resdir + fname) or not fname.endswith(".json"):
             continue
-        with open(resdir + fname) as f:
+        with open(resdir + fname, encoding='utf-8') as f:
             for k, line in enumerate(f.readlines()):
                 print(k)
                 for ing in re.split("\n|,", loads(line)["ingredients"].lower().strip()):
@@ -173,15 +189,13 @@ def get_ingredients():
     print(len(l_ing))
 
 if __name__ == '__main__':
-    from os.path import exists
-
     if not exists(resdir):
         makedirs(resdir)
     get_ingredient_refence()
     # exit()
     get_recipes()
     get_ingredients()
+    connect_db()
     app.run()
-
 # nltk.download('punkt')
 # 1137
