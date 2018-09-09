@@ -11,38 +11,43 @@ def greet():
     return "Hi!"
 
 def get_ingredient_refence():
-    from textblob import TextBlob
+    from re import match, sub
+    from textblob.inflect import singularize
 
     fname = "ing_list"
     if isfile(resdir + fname):
         return
     oxfordreference_base_url = "http://www.oxfordreference.com/view/10.1093/acref/9780199234875.001.0001/acref-9780199234875"
     tag_filter = {"class" : "contentItem oxencycl-entry locked hasCover chunkResult hi-visible py-3 border-top flex flex-row"}
-    i, tmp = 1, []
+    i, ing_list = 1, []
     while True:
         soup = BeautifulSoup(get(oxfordreference_base_url + "?page=" + str(i) + "&pageSize=100").text, "lxml")
         l = soup.find_all("div", tag_filter)
         if not l:
             break
-        for ing in l:
-            c = ing.h2.a.contents
-            if len(c) == 1:
-                cs = c[0].split(",")
-                ws = []
-                if len(cs) > 2:
-                    for cc in cs:
-                        ws.append(cc.lower().strip())
-                elif len(cs) == 2:
-                    ws.append((cs[1].strip() + " " + cs[0].strip()).lower())
+        for ing_div in l:
+            content_list = ing_div.h2.a.contents
+            if len(content_list) == 1:
+                content_split = content_list[0].split(",")
+                ings = []
+                if len(content_split) > 2:
+                    for content in content_split:
+                        ings.append(content.strip())
+                elif len(content_split) == 2:
+                    ings.append(content_split[1].strip() + " " + content_split[0].strip())
                 else:
-                    ws.append(cs[0].lower().strip())
-                for w in ws:
-                    if not w.startswith("free "):
-                        tb = TextBlob(w)
-                        tmp.append(' '.join(tb.words[: -1]) + " " + tb.words[-1].singularize())
+                    ings.append(content_split[0].strip())
+                for ing in ings:
+                    if len(ing) > 2 and not ing.startswith("free ") and not match("^.*[A-Z].*$", ing) and\
+                    not match("^.*[\u2010-\u2015\-]$", ing):
+                        ing = sub("\(.*\)", "", ing).strip()
+                        if not ing:
+                            continue
+                        ing_split = ing.split(" ")
+                        ing_list.append(' '.join(ing_split[: -1]) + " " + singularize(ing_split[-1]))
         i += 1
     with open(resdir + fname, "w") as f:
-        for t in sorted(tmp):
+        for t in sorted(ing_list):
             f.writelines(t + "\n")
 
 def get_recipes():
@@ -156,7 +161,7 @@ def get_ingredients():
                                 if not token:
                                     continue
                                 token = token[0].singularize()
-                            if token not in ings:
+                            if token not in ings or token in units_set:
                                 continue
                             else:
                                 s = token
@@ -178,7 +183,7 @@ if __name__ == '__main__':
     if not exists(resdir):
         makedirs(resdir)
     get_ingredient_refence()
-    # exit()
+    exit()
     get_recipes()
     get_ingredients()
     app.run()
