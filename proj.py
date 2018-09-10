@@ -108,10 +108,9 @@ def get_recipes():
 def get_ingredients():
     from json import loads
     from nltk.corpus import wordnet
-    from nltk.tokenize import word_tokenize
     from os import listdir
     from os.path import isfile
-    from textblob import TextBlob
+    from textblob.inflect import singularize
     import re
 
     def symspell_correction(misspelled):
@@ -130,7 +129,7 @@ def get_ingredients():
 
     units_regex, units_set, l_ing, ings = "", set(), set(), set()
     with open(resdir + "units", "r") as f:
-        tmp = [line.rstrip() for line in f]
+        tmp = [line.strip() for line in f]
         units_regex = re.sub("(\.|\#)", r"\\\1", "|".join(tmp))
         units_set = set(tmp)
     quantity_filter = "[\u2150-\u215e\u00bc-\u00be\u0030-\u0039]\s*("\
@@ -143,38 +142,37 @@ def get_ingredients():
             continue
         with open(resdir + fname) as f:
             for k, line in enumerate(f.readlines()):
-                print(k)
-                for ing in re.split("\n|,", loads(line)["ingredients"].lower().strip()):
-                    ing = re.findall(quantity_filter, ing)
-                    if not ing or len(ing) > 1:
+                # print(k)
+                for ing_str in re.split("\n|,", loads(line)["ingredients"].lower().strip()):
+                    ing_str = re.findall(quantity_filter, ing_str)
+                    if not ing_str or len(ing_str) > 1:
                         continue
-                    for elem in re.split("\s+(and|or|with|in)\s+", ing[0][-1].strip()):
-                        s, tokens = "", reversed(word_tokenize(elem))
-                        for i, token in enumerate(tokens):
-                            token = token.rstrip()
+                    # maybe split on stopwords
+                    for ing_str_split in re.split("\s+(and|or|with|in)\s+", ing_str[0][-1].strip()):
+                        ing, ing_str_tokens = "", list(reversed(ing_str_split.split(" ")))
+                        for i, token in enumerate(ing_str_tokens):
+                            token = token.strip()
                             if not token or re.match("^[a-z]+([\u002d\u2010-\u2015][a-z]+)+$", token):
                                 continue
                             # if token not in ings and not wordnet.synsets(token):
                             #     token = symspell_correction(token)
-                            if i == 0:
-                                token = TextBlob(token).words
-                                if not token:
-                                    continue
-                                token = token[0].singularize()
+                            if not ing:
+                                token = singularize(token)
                             if token not in ings or token in units_set:
                                 continue
-                            else:
-                                s = token
-                            for j in range(i + 1, len(list(tokens))):
-                                tmp = " ".join(reversed(list(tokens)[i + 1 : j + 1]))
-                                if not tmp + " " + s in ings:
-                                    s = " ".join(reversed(list(tokens)[i + 1 : j])) + " " + s
+                            ing = token
+                            for j in range(i + 1, len(ing_str_tokens)):
+                                tmp = " ".join(reversed(ing_str_tokens[i + 1 : j + 1]))
+                                if k == 135572:
+                                    print(tmp)
+                                if tmp + " " + ing not in ings:
+                                    ing = " ".join(reversed(ing_str_tokens[i + 1 : j])) + " " + ing
                                     break
                             break
-                        s = s.strip()
-                        if s and len(s) > 2:
-                            l_ing.add(s.strip())
-    print(l_ing)
+                        ing = ing.strip()
+                        if len(ing) > 2:
+                            l_ing.add(ing.strip())
+    print(sorted(list(l_ing)))
     print(len(l_ing))
 
 if __name__ == '__main__':
@@ -183,10 +181,9 @@ if __name__ == '__main__':
     if not exists(resdir):
         makedirs(resdir)
     get_ingredient_refence()
-    exit()
+    # exit()
     get_recipes()
     get_ingredients()
     app.run()
 
-# nltk.download('punkt')
-# 1137
+# 1262
