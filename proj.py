@@ -12,7 +12,22 @@ resdir = dirname(realpath(__file__)) + "/resources/"
 
 @app.route("/", methods=['Get'])
 def greet():
-    connect_db()
+    db=connect_db()
+    # print(recipes.find_one({"name": "Hot Roast Beef Sandwiches"}))
+    import re
+    # regx = re.compile("beef", re.IGNORECASE)
+    # res=db.recipe.find_one({"name": regx})
+
+
+    regx = re.compile("Sandwich", re.IGNORECASE)
+    res=db.recipe.find_one({"ingredients": regx})
+
+    print(res)
+
+    # cursor=db.recipe.find({'name':'/beef/i'})
+    # for document in cursor:
+    #     print(document)
+    # db.users.find().forEach(function(myDoc) {print("user: " + myDoc.name)} )
     return "Hi!"
 
 def connect_db():
@@ -28,6 +43,9 @@ def connect_db():
     db.authenticate(DB_USER, DB_PASS)
     # print(db.collection_names())
     return db
+
+@app.route("/insert_recipes", methods=['Get'])
+def insert_recipes():
 
 @app.route("/insert_recipes", methods=['Get'])
 def insert_recipes():
