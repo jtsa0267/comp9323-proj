@@ -12,8 +12,7 @@ resdir = dirname(realpath(__file__)) + "/resources/"
 
 @app.route("/", methods=['Get'])
 def greet():
-    db=connect_db()
-    insert_recipes(db)
+    connect_db()
     return "Hi!"
 
 def connect_db():
@@ -30,17 +29,14 @@ def connect_db():
     # print(db.collection_names())
     return db
 
-def insert_recipes(db):
-    ###TODO, read from file instead of hardcoded item
-    ###note: remove '$' from oid and date variables
-    #     with open('input_file.txt', 'rb') as f:
-    #         for row in f:
-    #           nodeInfo.insert_one(json.loads(row))
-    db.recipe.insert(
-      { "_id" : { "oid" : "5160756b96cc62079cc2db15" }, "name" : "Drop Biscuits and Sausage Gravy", "ingredients" : "Biscuits\n3 cups All-purpose Flour\n2 Tablespoons Baking Powder\n1/2 teaspoon Salt\n1-1/2 stick (3/4 Cup) Cold Butter, Cut Into Pieces\n1-1/4 cup Butermilk\n SAUSAGE GRAVY\n1 pound Breakfast Sausage, Hot Or Mild\n1/3 cup All-purpose Flour\n4 cups Whole Milk\n1/2 teaspoon Seasoned Salt\n2 teaspoons Black Pepper, More To Taste", "url" : "http://thepioneerwoman.com/cooking/2013/03/drop-biscuits-and-sausage-gravy/", "image" : "http://static.thepioneerwoman.com/cooking/files/2013/03/bisgrav.jpg", "ts" : { "date" : 1365276011104 }, "cookTime" : "PT30M", "source" : "thepioneerwoman", "recipeYield" : "12", "datePublished" : "2013-03-11", "prepTime" : "PT10M", "description" : "Late Saturday afternoon, after Marlboro Man had returned home with the soccer-playing girls, and I had returned home with the..." }
-    )
-
-
+@app.route("/insert_recipes", methods=['Get'])
+def insert_recipes():
+    db=connect_db()
+    ###note: removed '$' from oid and date variables
+    #TODO: change to load foreach file in folder
+    with open('resources/input_file.txt', 'rb') as f:
+        for row in f:
+            db.recipe.insert(json.loads(row))
 
 def get_ingredient_refence():
     from re import match, sub
@@ -113,10 +109,10 @@ def get_recipes():
         for i, tag in enumerate(soup.find_all("div", tag_filter)):
             url = chowdown_base_url + tag.a.attrs["href"]
             soup1 = BeautifulSoup(get(url).text, "lxml")
-            d = {"_id" : {"$oid" : i},
+            d = {"_id" : {"oid" : i},
                  "name" : soup1.title.contents[0],
                  "url" : url,
-                 "ts" : {"$date" : round(time())},
+                 "ts" : {"date" : round(time())},
                  "cookTime" : "P",
                  "source" : "chowdown",
                  "recipeYield" : -1,
