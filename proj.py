@@ -38,8 +38,8 @@ def get_ingredient_refence():
                 else:
                     ings.append(content_split[0].strip())
                 for ing in ings:
-                    if len(ing) > 2 and not ing.startswith("free ") and not match("^.*[A-Z].*$", ing) and\
-                    not match("^.*[\u2010-\u2015\-]$", ing):
+                    if len(ing) > 2 and not ing.startswith("free ") and not ing.startswith("food ") and\
+                    not match("^.*[A-Z].*$", ing) and not match("^.*[\u2010-\u2015\-]$", ing):
                         ing = sub("\(.*\)", "", ing).strip()
                         if not ing:
                             continue
@@ -51,7 +51,6 @@ def get_ingredient_refence():
             f.writelines(t + "\n")
 
 def get_recipes():
-    from bs4 import BeautifulSoup
     from datetime import datetime
     from os import makedirs
     from time import time
