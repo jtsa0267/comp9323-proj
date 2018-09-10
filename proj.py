@@ -3,6 +3,7 @@ from flask import Flask, request, Response
 from os.path import dirname, isfile, realpath
 from os.path import exists
 from requests import get
+import json
 import pymongo
 from pymongo import MongoClient
 
@@ -11,6 +12,8 @@ resdir = dirname(realpath(__file__)) + "/resources/"
 
 @app.route("/", methods=['Get'])
 def greet():
+    db=connect_db()
+    insert_recipes(db)
     return "Hi!"
 
 def connect_db():
@@ -25,6 +28,19 @@ def connect_db():
     db = connection[DB_NAME]
     db.authenticate(DB_USER, DB_PASS)
     # print(db.collection_names())
+    return db
+
+def insert_recipes(db):
+    ###TODO, read from file instead of hardcoded item
+    ###note: remove '$' from oid and date variables
+    #     with open('input_file.txt', 'rb') as f:
+    #         for row in f:
+    #           nodeInfo.insert_one(json.loads(row))
+    db.recipe.insert(
+      { "_id" : { "oid" : "5160756b96cc62079cc2db15" }, "name" : "Drop Biscuits and Sausage Gravy", "ingredients" : "Biscuits\n3 cups All-purpose Flour\n2 Tablespoons Baking Powder\n1/2 teaspoon Salt\n1-1/2 stick (3/4 Cup) Cold Butter, Cut Into Pieces\n1-1/4 cup Butermilk\n SAUSAGE GRAVY\n1 pound Breakfast Sausage, Hot Or Mild\n1/3 cup All-purpose Flour\n4 cups Whole Milk\n1/2 teaspoon Seasoned Salt\n2 teaspoons Black Pepper, More To Taste", "url" : "http://thepioneerwoman.com/cooking/2013/03/drop-biscuits-and-sausage-gravy/", "image" : "http://static.thepioneerwoman.com/cooking/files/2013/03/bisgrav.jpg", "ts" : { "date" : 1365276011104 }, "cookTime" : "PT30M", "source" : "thepioneerwoman", "recipeYield" : "12", "datePublished" : "2013-03-11", "prepTime" : "PT10M", "description" : "Late Saturday afternoon, after Marlboro Man had returned home with the soccer-playing girls, and I had returned home with the..." }
+    )
+
+
 
 def get_ingredient_refence():
     from re import match, sub
