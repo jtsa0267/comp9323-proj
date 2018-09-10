@@ -163,8 +163,6 @@ def get_ingredients():
                             ing = token
                             for j in range(i + 1, len(ing_str_tokens)):
                                 tmp = " ".join(reversed(ing_str_tokens[i + 1 : j + 1]))
-                                if k == 135572:
-                                    print(tmp)
                                 if tmp + " " + ing not in ings:
                                     ing = " ".join(reversed(ing_str_tokens[i + 1 : j])) + " " + ing
                                     break
