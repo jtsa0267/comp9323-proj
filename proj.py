@@ -11,43 +11,93 @@ def greet():
     return "Hi!"
 
 def get_ingredient_refence():
-    from re import match, sub
     from textblob.inflect import singularize
+
+    def oxford_reference_ing():
+        from re import match, sub
+
+        oxfordreference_base_url = "http://www.oxfordreference.com/view/10.1093/acref/9780199234875.001.0001/acref-9780199234875"
+        tag_filter = {"class" : "contentItem oxencycl-entry locked hasCover chunkResult hi-visible p-4 border-top"}
+        i, ing_list = 1, []
+        while True:
+            url = oxfordreference_base_url + "?page=" + str(i) + "&pageSize=100"
+
+            print(url)
+
+            soup = BeautifulSoup(get(url).text, "lxml")
+            l = soup.find_all("div", tag_filter)
+            if not l:
+                break
+            for ing_div in l:
+                content_list = ing_div.h2.a.contents
+                if len(content_list) == 1:
+                    content_split = content_list[0].split(",")
+                    ings = []
+                    if len(content_split) > 2:
+                        for content in content_split:
+                            ings.append(content.strip())
+                    elif len(content_split) == 2:
+                        ings.append(content_split[1].strip() + " " + content_split[0].strip())
+                    else:
+                        ings.append(content_split[0].strip())
+                    for ing in ings:
+                        if len(ing) > 2 and not ing.startswith("free ") and not ing.startswith("food ") and\
+                        not match("^.*[A-Z].*$", ing) and not match("^.*[\u2010-\u2015\-]$", ing):
+                            ing = sub("\(.*\)", "", ing).strip()
+                            if not ing:
+                                continue
+                            ing_split = ing.split(" ")
+                            ing_list.append((' '.join(ing_split[: -1]) + " " + singularize(ing_split[-1])).strip())
+            i += 1
+
+        return ing_list
+
+    def wiki_cookbook_ing():
+        from bs4 import Comment
+        from re import sub
+
+        def ul_children(sib):
+            l = []
+            if not sib.name == "ul":
+                if sib.name:
+                    l.append(sib.a.contents[0])
+            else:
+                for child in sib.findAll(["li", "ul"]):
+                    l += ul_children(child)
+
+            return l
+
+        wikicookbook_url = "https://en.wikibooks.org/wiki/Cookbook:Ingredients"
+        soup = BeautifulSoup(get(wikicookbook_url).text, "lxml")
+        l, ing_list = soup.find_all("h2"), set()
+        for title_tag in l:
+            if not title_tag.span:
+                continue
+            for sibling in title_tag.next_siblings:
+                if sibling.name == "h2" or isinstance(sibling, Comment):
+                    break
+                l_alphabet_ing = ul_children(sibling)
+                if l_alphabet_ing:
+                    for ing in l_alphabet_ing:
+                        ing = sub("\(.*\)", "", ing).strip()
+                        if ing.startswith("Dairy products and ") or ing.endswith(" family"):
+                            continue
+                        ing_words = ing.split(",")
+                        if len(ing_words) > 1:
+                            ing = ing_words[1].strip() + " " + ing_words[0].strip()
+                        else:
+                            ing = ing_words[0].strip()
+                        ing_words = ing.split(" ")
+                        ing_list.add((" ".join(ing_words[: -1]) + singularize(ing_words[-1])).lower().strip())
+
+        return list(ing_list)
 
     fname = "ing_list"
     if isfile(resdir + fname):
         return
-    oxfordreference_base_url = "http://www.oxfordreference.com/view/10.1093/acref/9780199234875.001.0001/acref-9780199234875"
-    tag_filter = {"class" : "contentItem oxencycl-entry locked hasCover chunkResult hi-visible py-3 border-top flex flex-row"}
-    i, ing_list = 1, []
-    while True:
-        soup = BeautifulSoup(get(oxfordreference_base_url + "?page=" + str(i) + "&pageSize=100").text, "lxml")
-        l = soup.find_all("div", tag_filter)
-        if not l:
-            break
-        for ing_div in l:
-            content_list = ing_div.h2.a.contents
-            if len(content_list) == 1:
-                content_split = content_list[0].split(",")
-                ings = []
-                if len(content_split) > 2:
-                    for content in content_split:
-                        ings.append(content.strip())
-                elif len(content_split) == 2:
-                    ings.append(content_split[1].strip() + " " + content_split[0].strip())
-                else:
-                    ings.append(content_split[0].strip())
-                for ing in ings:
-                    if len(ing) > 2 and not ing.startswith("free ") and not ing.startswith("food ") and\
-                    not match("^.*[A-Z].*$", ing) and not match("^.*[\u2010-\u2015\-]$", ing):
-                        ing = sub("\(.*\)", "", ing).strip()
-                        if not ing:
-                            continue
-                        ing_split = ing.split(" ")
-                        ing_list.append(' '.join(ing_split[: -1]) + " " + singularize(ing_split[-1]))
-        i += 1
+    l_ing = list(set(oxford_reference_ing() + wiki_cookbook_ing()))
     with open(resdir + fname, "w") as f:
-        for t in sorted(ing_list):
+        for t in sorted(l_ing):
             f.writelines(t + "\n")
 
 def get_recipes():
@@ -183,4 +233,4 @@ if __name__ == '__main__':
     get_ingredients()
     app.run()
 
-# 1262
+# 1298
