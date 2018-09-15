@@ -10,6 +10,10 @@ resdir = dirname(realpath(__file__)) + "/resources/"
 def greet():
     return "Hi!"
 
+@app.route("/something", methods=['Get'])
+def something():
+    return "soemthing"
+
 def get_ingredient_refence():
     from re import match, sub
     from textblob.inflect import singularize
@@ -101,8 +105,64 @@ def get_recipes():
             with open(resdir + fname, "a") as f:
                 f.write(str(d).replace("'", "\"") + "\n")
 
+    def get_taste():
+        soup = BeautifulSoup(get("https://www.taste.com.au/recipes/collections?page=1&sort=recent").text, "html.parser")
+
+        #for each page containing recipe folders
+        for url in soup.find_all('article'):
+            # print(url)
+            folder_link_path = url.figure.a["href"]
+            # print(folder_link)
+
+            #opens each recipe folder
+            recipe_folder = BeautifulSoup(get("https://www.taste.com.au" + folder_link_path).text, "html.parser")
+            for recipe_collection in recipe_folder.find_all('article'):
+                recipe_link_path = recipe_collection.figure.a["href"]
+                recipe_link = BeautifulSoup(get("https://www.taste.com.au" + recipe_link_path).text, "html.parser")
+                # print(recipe_link_path)
+
+                #open each recipe and get details
+                # name
+                name = recipe_link.find(['div'] , class_="col-xs-12").h1.text
+                # print(name)
+
+                for recipe in recipe_link.find_all(['main'] , class_="col-xs-12"):
+                    #also need to add TS, source, datePublished
+                    # print(recipe.prettify())
+
+                    #ingredient
+                    for ingredient in recipe.find_all('div', class_="ingredient-description"):
+                        ing = ingredient.text
+                        print("ing " + ing)
+
+                    #method
+                    for m in recipe.find_all('div', class_="recipe-method-step-content"):
+                        method = m.text
+                        # print(method)
+
+                    #recipe info (cooktime, preptime, servings)
+                    for c in recipe.find_all('ul', class_="recipe-cooking-infos"):
+                        for info in recipe.find_all('li'):
+                            info = info.text
+                            if "Cook" in info:
+                                cookTime = info
+                                # print(cookTime)
+                            if "Prep" in info:
+                                prepTime = info
+                            if "Servings" in info:
+                                recipeYield = info
+                                # print(recipeYield)
+                    #image
+                    image = recipe.img["src"]
+                    print(image)
+
+                    # print(type(recipe))
+                    # if not recipe:
+                    #     continue
+
     get_openrecipes()
     get_chowdown()
+    get_taste()
 
 def get_ingredients():
     from json import loads
@@ -181,6 +241,7 @@ if __name__ == '__main__':
     # exit()
     get_recipes()
     get_ingredients()
+
     app.run()
 
 # 1262
