@@ -88,7 +88,7 @@ def get_ingredient_refence():
                         else:
                             ing = ing_words[0].strip()
                         ing_words = ing.split(" ")
-                        ing_list.add((" ".join(ing_words[: -1]) + singularize(ing_words[-1])).lower().strip())
+                        ing_list.add((" ".join(ing_words[: -1]) + " " + singularize(ing_words[-1])).lower().strip())
 
         return list(ing_list)
 
