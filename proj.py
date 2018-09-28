@@ -106,6 +106,7 @@ def get_recipes():
                 f.write(str(d).replace("'", "\"") + "\n")
 
     def get_taste():
+        import re
         soup = BeautifulSoup(get("https://www.taste.com.au/recipes/collections?page=1&sort=recent").text, "html.parser")
 
         #for each page containing recipe folders
@@ -116,28 +117,35 @@ def get_recipes():
 
             #opens each recipe folder
             recipe_folder = BeautifulSoup(get("https://www.taste.com.au" + folder_link_path).text, "html.parser")
-            for recipe_collection in recipe_folder.find_all('article'):
+            for i, recipe_collection in enumerate(recipe_folder.find_all('article')):
                 recipe_link_path = recipe_collection.figure.a["href"]
                 recipe_link = BeautifulSoup(get("https://www.taste.com.au" + recipe_link_path).text, "html.parser")
                 # print(recipe_link_path)
 
                 #open each recipe and get details
+                d = {"source": "taste"}
+                d["ts"] = {"$date": round(time())}
+                d["datePublished"] = str(datetime.now().strftime("%Y-%m-%d"))
+
                 # name
                 name = recipe_link.find(['div'] , class_="col-xs-12").h1.text
+                d["id"] ={"$oid" : i}
+                d["name"] = name
                 # print(name)
-
                 for recipe in recipe_link.find_all(['main'] , class_="col-xs-12"):
-                    #also need to add TS, source, datePublished
                     # print(recipe.prettify())
 
                     #ingredient
                     for ingredient in recipe.find_all('div', class_="ingredient-description"):
                         ing = ingredient.text
-                        print("ing " + ing)
+                        d.setdefault("ing", []).append(ing)
 
                     #method
                     for m in recipe.find_all('div', class_="recipe-method-step-content"):
                         method = m.text
+                        method = re.sub('\n', '',method)
+                        method = re.sub(' +', ' ',method).lstrip().rstrip()
+                        d.setdefault("method", []).append(method)
                         # print(method)
 
                     #recipe info (cooktime, preptime, servings)
@@ -146,15 +154,30 @@ def get_recipes():
                             info = info.text
                             if "Cook" in info:
                                 cookTime = info
+                                d["cookTime"] = cookTime
                                 # print(cookTime)
+
                             if "Prep" in info:
                                 prepTime = info
+                                d["prepTime"] = prepTime
+
                             if "Servings" in info:
                                 recipeYield = info
+                                d["recipeYield"] = recipeYield
                                 # print(recipeYield)
                     #image
                     image = recipe.img["src"]
-                    print(image)
+                    d["image"] = image
+                    # print(image)
+
+                    print(d)
+                    #TODO
+                    #Take out "Cook" and "Prep" words
+                    #cook and prep time buggy returning weird things
+
+                    #Make only go through latest recipe list
+                    #traverse through pages in each collection
+
 
                     # print(type(recipe))
                     # if not recipe:
