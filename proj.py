@@ -107,20 +107,35 @@ def get_recipes():
 
     def get_taste():
         import re
+        fname = "taste-recipes.json"
+        if isfile(resdir + fname):
+            return
+
         soup = BeautifulSoup(get("https://www.taste.com.au/recipes/collections?page=1&sort=recent").text, "html.parser")
 
         #for each page containing recipe folders
+        # for recipe_num in soup.find_all(['span'] , class_="count"):
+        #     num_page = int(recipe_num.text) // 15
+        #     print(num_page)
+
         for url in soup.find_all('article'):
             # print(url)
-            folder_link_path = url.figure.a["href"]
-            # print(folder_link)
+            collection_link_path = url.figure.a["href"]
+            # print(collection_link_path)
 
-            #opens each recipe folder
-            recipe_folder = BeautifulSoup(get("https://www.taste.com.au" + folder_link_path).text, "html.parser")
-            for i, recipe_collection in enumerate(recipe_folder.find_all('article')):
-                recipe_link_path = recipe_collection.figure.a["href"]
+            #opens each recipe collection
+            a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path).text, "html.parser")
+            #traverse each page in collection
+            # num_pages = list(a_collection_page.find('div', class_="col-xs-8 pages").text)[-1]
+            # a_collection_page = "https://www.taste.com.au" + collection_link_path
+
+
+            # for i, recipe in enumerate(a_collection_page.find_all('article')):
+            #eg in Indian food collection get each recipe
+            for i, recipe in enumerate(a_collection_page.find_all(['li'] , class_="col-xs-6")):
+                recipe_link_path = recipe.figure.a["href"]
                 recipe_link = BeautifulSoup(get("https://www.taste.com.au" + recipe_link_path).text, "html.parser")
-                # print(recipe_link_path)
+                print(recipe_link_path)
 
                 #open each recipe and get details
                 d = {"source": "taste"}
@@ -170,14 +185,18 @@ def get_recipes():
                     d["image"] = image
                     # print(image)
 
-                    print(d)
+                    # print(d)
+                    with open(resdir + fname, "a") as f:
+                        f.write(str(d).replace("'", "\"") + "\n")
                     #TODO
                     #Take out "Cook" and "Prep" words
                     #cook and prep time buggy returning weird things
 
-                    #Make only go through latest recipe list
+                    #Make only go through latest recipe list THINK"S IT DONE
                     #traverse through pages in each collection
+                    #traverse entire collection set
 
+                    #add to json file
 
                     # print(type(recipe))
                     # if not recipe:
