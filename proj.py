@@ -1,5 +1,5 @@
 from bs4 import BeautifulSoup
-from flask import Flask, request, Response
+from flask import Flask, request, Response, jsonify
 from os.path import dirname, isfile, realpath
 from os.path import exists
 from requests import get
@@ -12,24 +12,10 @@ resdir = dirname(realpath(__file__)) + "/resources/"
 
 @app.route("/", methods=['Get'])
 def greet():
-    db=connect_db()
-    # print(recipes.find_one({"name": "Hot Roast Beef Sandwiches"}))
-    import re
-    # regx = re.compile("beef", re.IGNORECASE)
-    # res=db.recipe.find_one({"name": regx})
-
-
-    regx = re.compile("Sandwich", re.IGNORECASE)
-    res=db.recipe.find_one({"ingredients": regx})
-
-    print(res)
-
-    # cursor=db.recipe.find({'name':'/beef/i'})
-    # for document in cursor:
-    #     print(document)
-    # db.users.find().forEach(function(myDoc) {print("user: " + myDoc.name)} )
+    # get_collection_fields() #to be called by Kai from frontend
     return "Hi!"
 
+#Connects to mLab's MongoDB and returns connection
 def connect_db():
     DB_NAME = "comp9323"
     DB_HOST = "ds251112.mlab.com"
@@ -37,18 +23,64 @@ def connect_db():
     DB_USER = "admin"
     DB_PASS = "admin18"
     pass
-
     connection = MongoClient(DB_HOST, DB_PORT)
     db = connection[DB_NAME]
     db.authenticate(DB_USER, DB_PASS)
-    # print(db.collection_names())
     return db
 
-@app.route("/insert_recipes", methods=['Get'])
-def insert_recipes():
+'''Returns requested columns from a collection
+    Takes in JSON request where key1=collection, key2=columns
+    https://docs.mongodb.com/manual/tutorial/project-fields-from-query-results/
+'''
+@app.route("/get_collection_fields", methods=['Get','Post'])
+def get_collection_fields():
+    db=connect_db()
+    # content = request.json
+    content = jsonify({
+        'collection':'user',
+        'fields': ["username", "password"]
+    })
+    ###replace all "content" occurence  with "request" below:
+    if content.json is None:
+        return (400, "JSON not provided")
+    else:
+        col = content.get_json()['collection']
+        fields = content.get_json()['fields']
 
-@app.route("/insert_recipes", methods=['Get'])
-def insert_recipes():
+    query = {}
+    query['_id'] = 0
+    for f in fields:
+        query[f] = 1
+    cursor = db[col].find({},query)
+    json_docs = []
+    from bson import json_util
+    for doc in cursor:
+        json_doc = json.dumps(doc, default=json_util.default)
+        json_docs.append(json_doc)
+    print("done getting database fields")
+    return jsonify(json_docs)
+
+#This API may be redundant if Kai implements search from frontend
+@app.route("/search_db_recipes", methods=['Get'])
+def search_db_recipes():
+    db=connect_db()
+    # print(recipes.find_one({"name": "Hot Roast Beef Sandwiches"}))
+    import re
+    # regx = re.compile("beef", re.IGNORECASE)
+    # res=db.recipe.find_one({"name": regx})
+    regx = re.compile("Sandwich", re.IGNORECASE)    #'^[work|accus*|planet]'
+    res=db.recipe.find_one({"ingredients": regx})
+
+    print(res)
+    # cursor=db.recipe.find({'name':'/beef/i'})
+    # for document in cursor:
+    #     print(document)
+    # db.users.find().forEach(function(myDoc) {print("user: " + myDoc.name)} )
+    return "searching recipes by ingredients..."
+
+#Inserts all scraped recipes into database
+@app.route("/insert_db_recipes", methods=['Get'])
+def insert_db_recipes():
     db=connect_db()
     ###note: removed '$' from oid and date variables
     #TODO: change to load foreach file in folder
@@ -96,6 +128,7 @@ def get_ingredient_refence():
         for t in sorted(ing_list):
             f.writelines(t + "\n")
 
+#Scrape several websites for recipes
 def get_recipes():
     from bs4 import BeautifulSoup
     from datetime import datetime
@@ -225,7 +258,8 @@ def get_ingredients():
 
 if __name__ == '__main__':
     if not exists(resdir):
-        makedirs(resdir)
+        import os
+        os.makedirs(resdir)
     get_ingredient_refence()
     exit()
     get_recipes()
