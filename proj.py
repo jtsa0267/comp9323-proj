@@ -112,82 +112,94 @@ def get_recipes():
             return
 
         soup = BeautifulSoup(get("https://www.taste.com.au/recipes/collections?page=1&sort=recent").text, "html.parser")
-
         #for each page containing recipe folders
+        # print("start")
         # for recipe_num in soup.find_all(['span'] , class_="count"):
-        #     num_page = int(recipe_num.text) // 15
+        #     print(" start loop")
+
+        #     num_page = int(recipe_num.text) // 20
         #     print(num_page)
 
         for url in soup.find_all('article'):
             # print(url)
-            collection_link_path = url.figure.a["href"]
-            # print(collection_link_path)
+            collection_link_path = url.figure.a["href"] #/recipes/collections/indian-curry-recipes
+            print(collection_link_path)
 
             #opens each recipe collection
+            #https://www.taste.com.au/recipes/collections/indian-curry-recipes
             a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path).text, "html.parser")
             #traverse each page in collection
-            # num_pages = list(a_collection_page.find('div', class_="col-xs-8 pages").text)[-1]
+            num_pages = list(a_collection_page.find('div', class_="col-xs-8 pages").text)[-1]
+            print(num_pages)
             # a_collection_page = "https://www.taste.com.au" + collection_link_path
+ 
+            #HERE
+            for i in range(1, int(num_pages)+1):
+                print("NEXT page: " + "https://www.taste.com.au" + collection_link_path+ "?page="+str(i)+"&q=&sort=recent")
+                a_collection_page = a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path+ "?page="+str(i)+"&q=&sort=recent").text, "html.parser")
+            
+                # for i, recipe in enumerate(a_collection_page.find_all('article')):
+                #eg in Indian food collection get each recipe
+                recipe_section = a_collection_page.find(['main'])
+                #repeat go into each recipe fpr X pages in collectoin
+                for i, recipe in enumerate(recipe_section.find_all(['li'] , class_="col-xs-6")):
+                    recipe_link_path = recipe.figure.a["href"]
+                    recipe_link = BeautifulSoup(get("https://www.taste.com.au" + recipe_link_path).text, "html.parser")
+                    print(recipe_link_path)
 
+                    #open each recipe and get details
+                    d = {"source": "taste"}
+                    d["ts"] = {"$date": round(time())}
+                    d["datePublished"] = str(datetime.now().strftime("%Y-%m-%d"))
 
-            # for i, recipe in enumerate(a_collection_page.find_all('article')):
-            #eg in Indian food collection get each recipe
-            for i, recipe in enumerate(a_collection_page.find_all(['li'] , class_="col-xs-6")):
-                recipe_link_path = recipe.figure.a["href"]
-                recipe_link = BeautifulSoup(get("https://www.taste.com.au" + recipe_link_path).text, "html.parser")
-                print(recipe_link_path)
+                    # name
+                    name = recipe_link.find(['div'] , class_="col-xs-12").h1.text
+                    d["id"] ={"$oid" : i}
+                    d["name"] = name
+                    # print(name)
+                    for recipe in recipe_link.find_all(['main'] , class_="col-xs-12"):
+                        # print(recipe.prettify())
 
-                #open each recipe and get details
-                d = {"source": "taste"}
-                d["ts"] = {"$date": round(time())}
-                d["datePublished"] = str(datetime.now().strftime("%Y-%m-%d"))
+                        #ingredient
+                        for ingredient in recipe.find_all('div', class_="ingredient-description"):
+                            ing = ingredient.text
+                            d.setdefault("ing", []).append(ing)
 
-                # name
-                name = recipe_link.find(['div'] , class_="col-xs-12").h1.text
-                d["id"] ={"$oid" : i}
-                d["name"] = name
-                # print(name)
-                for recipe in recipe_link.find_all(['main'] , class_="col-xs-12"):
-                    # print(recipe.prettify())
+                        #method
+                        for m in recipe.find_all('div', class_="recipe-method-step-content"):
+                            method = m.text
+                            method = re.sub('\n', '',method)
+                            method = re.sub(' +', ' ',method).lstrip().rstrip()
+                            d.setdefault("method", []).append(method)
+                            # print(method)
 
-                    #ingredient
-                    for ingredient in recipe.find_all('div', class_="ingredient-description"):
-                        ing = ingredient.text
-                        d.setdefault("ing", []).append(ing)
+                        #recipe info (cooktime, preptime, servings)
+                        for c in recipe.find_all('ul', class_="recipe-cooking-infos"):
+                            for info in recipe.find_all('li'):
+                                info = info.text
+                                if "Cook" in info:
+                                    cookTime = info
+                                    d["cookTime"] = cookTime
+                                    # print(cookTime)
 
-                    #method
-                    for m in recipe.find_all('div', class_="recipe-method-step-content"):
-                        method = m.text
-                        method = re.sub('\n', '',method)
-                        method = re.sub(' +', ' ',method).lstrip().rstrip()
-                        d.setdefault("method", []).append(method)
-                        # print(method)
+                                if "Prep" in info:
+                                    prepTime = info
+                                    d["prepTime"] = prepTime
 
-                    #recipe info (cooktime, preptime, servings)
-                    for c in recipe.find_all('ul', class_="recipe-cooking-infos"):
-                        for info in recipe.find_all('li'):
-                            info = info.text
-                            if "Cook" in info:
-                                cookTime = info
-                                d["cookTime"] = cookTime
-                                # print(cookTime)
+                                if "Servings" in info:
+                                    recipeYield = info
+                                    d["recipeYield"] = recipeYield
+                                    # print(recipeYield)
+                        #image
+                        image = recipe.img["src"]
+                        d["image"] = image
+                        # print(image)
 
-                            if "Prep" in info:
-                                prepTime = info
-                                d["prepTime"] = prepTime
+                        # print(d)
 
-                            if "Servings" in info:
-                                recipeYield = info
-                                d["recipeYield"] = recipeYield
-                                # print(recipeYield)
-                    #image
-                    image = recipe.img["src"]
-                    d["image"] = image
-                    # print(image)
-
-                    # print(d)
-                    with open(resdir + fname, "a") as f:
-                        f.write(str(d).replace("'", "\"") + "\n")
+                        #CREATING FILE
+                        # with open(resdir + fname, "a") as f:
+                        #     f.write(str(d).replace("'", "\"") + "\n")
                     #TODO
                     #Take out "Cook" and "Prep" words
                     #cook and prep time buggy returning weird things
@@ -196,7 +208,6 @@ def get_recipes():
                     #traverse through pages in each collection
                     #traverse entire collection set
 
-                    #add to json file
 
                     # print(type(recipe))
                     # if not recipe:
