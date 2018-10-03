@@ -1,5 +1,5 @@
 from bs4 import BeautifulSoup
-from flask import Flask, request, Response, jsonify
+from flask import Flask, request, Response, jsonify, abort
 from os.path import dirname, isfile, realpath
 from os.path import exists
 from requests import get
@@ -12,10 +12,9 @@ resdir = dirname(realpath(__file__)) + "/resources/"
 
 @app.route("/", methods=['Get'])
 def greet():
-    # get_collection_fields() #to be called by Kai from frontend
     return "Hi!"
 
-#Connects to mLab's MongoDB and returns connection
+'''Connects to mLab's MongoDB and returns connection'''
 def connect_db():
     DB_NAME = "comp9323"
     DB_HOST = "ds251112.mlab.com"
@@ -36,16 +35,15 @@ def connect_db():
 def get_collection_fields():
     db=connect_db()
     # content = request.json
-    content = jsonify({
-        'collection':'user',
-        'fields': ["username", "password"]
-    })
-    ###replace all "content" occurence  with "request" below:
-    if content.json is None:
-        return (400, "JSON not provided")
+    # content = jsonify({
+    #     'collection':'user',
+    #     'fields': ["username", "password"]
+    # })
+    if request.json is None:
+        abort(400, 'No valid JSON not provided')
     else:
-        col = content.get_json()['collection']
-        fields = content.get_json()['fields']
+        col = request.get_json()['collection']
+        fields = request.get_json()['fields']
 
     query = {}
     query['_id'] = 0
@@ -53,14 +51,14 @@ def get_collection_fields():
         query[f] = 1
     cursor = db[col].find({},query)
     json_docs = []
-    from bson import json_util
     for doc in cursor:
-        json_doc = json.dumps(doc, default=json_util.default)
-        json_docs.append(json_doc)
+        json_docs.append(doc)
     print("done getting database fields")
     return jsonify(json_docs)
 
-#This API may be redundant if Kai implements search from frontend
+'''Returns recipes that contains searched ingredients
+    Takes in JSON request where key1=array of ingredients
+'''
 @app.route("/search_db_recipes", methods=['Get'])
 def search_db_recipes():
     db=connect_db()
@@ -76,9 +74,9 @@ def search_db_recipes():
     # for document in cursor:
     #     print(document)
     # db.users.find().forEach(function(myDoc) {print("user: " + myDoc.name)} )
-    return "searching recipes by ingredients..."
+    abort(400, 'API not fully implemented yet ):')
 
-#Inserts all scraped recipes into database
+'''Inserts all scraped recipes into database'''
 @app.route("/insert_db_recipes", methods=['Get'])
 def insert_db_recipes():
     db=connect_db()
@@ -87,6 +85,7 @@ def insert_db_recipes():
     with open('resources/input_file.txt', 'rb') as f:
         for row in f:
             db.recipe.insert(json.loads(row))
+    return "200: OK, finished inserting into database"
 
 def get_ingredient_refence():
     from re import match, sub
@@ -184,7 +183,7 @@ def get_recipes():
     get_openrecipes()
     get_chowdown()
 
-def get_ingredients():
+def scrape_ingredients():
     from json import loads
     from nltk.corpus import wordnet
     from nltk.tokenize import word_tokenize
@@ -256,6 +255,32 @@ def get_ingredients():
     print(l_ing)
     print(len(l_ing))
 
+''' Returns all ingredients from textfile as JSON'''
+@app.route("/get_ingredients", methods=['Get'])
+def get_ingredients():
+    json_rows = []
+    import codecs
+    with codecs.open('resources/ing_list', 'r', encoding='unicode_escape') as f:
+        for row in f:
+            json_row = {"name":row.rstrip("\n\r")}
+            json_rows.append(json_row)
+    return jsonify(json_rows)
+
+# Inserts new user into database
+@app.route("/insert_user", methods=['Get'])
+def insert_user():
+    db = connect_db()
+    db.user.insert("")
+    abort(400, 'API not fully implemented yet ):')
+
+# Update user details
+@app.route("/update_user", methods=['Get'])
+def update_user():
+    db = connect_db()
+    db.user.insert("")
+    abort(400, 'API not fully implemented yet ):')
+
+
 if __name__ == '__main__':
     if not exists(resdir):
         import os
@@ -263,7 +288,7 @@ if __name__ == '__main__':
     get_ingredient_refence()
     exit()
     get_recipes()
-    get_ingredients()
+    scrape_ingredients()
     connect_db()
     app.run()
 # nltk.download('punkt')
