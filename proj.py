@@ -1,5 +1,6 @@
 from bs4 import BeautifulSoup
-from flask import Flask, request, Response, jsonify, abort
+from flask import Flask, request, Response, jsonify, abort, session, url_for, redirect, escape
+import os
 from os.path import dirname, isfile, realpath
 from os.path import exists
 from requests import get
@@ -8,11 +9,29 @@ import pymongo
 from pymongo import MongoClient
 
 app = Flask(__name__)
+app.secret_key = os.urandom(24)
 resdir = dirname(realpath(__file__)) + "/resources/"
 
 @app.route("/", methods=['Get'])
 def greet():
-    return "Hi!"
+    if 'username' in session:
+        return 'Logged in as %s' % escape(session['username'])
+    return 'Hi, you are not logged in'
+
+'''Signs user in and redirects to homepage'''
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        session['username'] = request.form['username']
+        return redirect(url_for('greet'))   #todo, redirect to home page instead
+    
+
+'''Logs user out and redirects to homepage'''
+@app.route('/logout')
+def logout():
+    # remove the username from the session if it's there
+    session.pop('username', None)
+    return redirect(url_for('greet')) #todo, redirect to home page instead
 
 '''Connects to mLab's MongoDB and returns connection'''
 def connect_db():
@@ -31,7 +50,7 @@ def connect_db():
     Takes in JSON request where key1=collection, key2=columns
     https://docs.mongodb.com/manual/tutorial/project-fields-from-query-results/
 '''
-@app.route("/get_collection_fields", methods=['Get','Post'])
+@app.route("/collection-fields", methods=['Get','Post'])
 def get_collection_fields():
     db=connect_db()
     # content = request.json
@@ -59,7 +78,7 @@ def get_collection_fields():
 '''Returns recipes that contains searched ingredients
     Takes in JSON request where key1=array of ingredients
 '''
-@app.route("/search_db_recipes", methods=['Get'])
+@app.route("/recipes", methods=['Get'])
 def search_db_recipes():
     db=connect_db()
     # print(recipes.find_one({"name": "Hot Roast Beef Sandwiches"}))
@@ -77,7 +96,6 @@ def search_db_recipes():
     abort(400, 'API not fully implemented yet ):')
 
 '''Inserts all scraped recipes into database'''
-@app.route("/insert_db_recipes", methods=['Get'])
 def insert_db_recipes():
     db=connect_db()
     ###note: removed '$' from oid and date variables
@@ -85,7 +103,6 @@ def insert_db_recipes():
     with open('resources/input_file.txt', 'rb') as f:
         for row in f:
             db.recipe.insert(json.loads(row))
-    return "200: OK, finished inserting into database"
 
 def get_ingredient_refence():
     from re import match, sub
@@ -256,7 +273,7 @@ def scrape_ingredients():
     print(len(l_ing))
 
 ''' Returns all ingredients from textfile as JSON'''
-@app.route("/get_ingredients", methods=['Get'])
+@app.route("/ingredients", methods=['Get'])
 def get_ingredients():
     json_rows = []
     import codecs
@@ -266,16 +283,9 @@ def get_ingredients():
             json_rows.append(json_row)
     return jsonify(json_rows)
 
-# Inserts new user into database
-@app.route("/insert_user", methods=['Get'])
-def insert_user():
-    db = connect_db()
-    db.user.insert("")
-    abort(400, 'API not fully implemented yet ):')
-
-# Update user details
-@app.route("/update_user", methods=['Get'])
-def update_user():
+# Inserts/updates user into database
+@app.route("/users/<username>", methods=['Get'])
+def insert_user(username):
     db = connect_db()
     db.user.insert("")
     abort(400, 'API not fully implemented yet ):')
