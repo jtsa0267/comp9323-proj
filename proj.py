@@ -15,28 +15,28 @@ resdir = dirname(realpath(__file__)) + "/resources/"
 
 @app.route("/", methods=['Get'])
 def greet():
-    if 'username' in session:
-        return 'Logged in as %s' % escape(session['username'])
+    if 'email' in session:
+        return 'Logged in as %s' % escape(session['email'])
     return 'Hi, you are not logged in'
 
 '''Signs user in and redirects to homepage'''
 @app.route('/login', methods=['POST'])
 def login():
     if request.method == 'POST':
-        username = request.get_json()['email']
+        email = request.get_json()['email']
         password = request.get_json()['password']
         db = connect_db()
-        res = db.users.find_one({"username": username})
+        res = db.users.find_one({"email": email})
         if password==res['password']:
-            session['username'] = username
+            session['email'] = email
             return json.dumps({'success': True}), 200, {'ContentType': 'application/json'}
     return json.dumps({'success': False,'error': 'Wrong credentials'}), 200, {'ContentType': 'application/json'}
 
 '''Logs user out and redirects to homepage'''
 @app.route('/logout')
 def logout():
-    # remove the username from the session if it's there
-    session.pop('username', None)
+    # remove the email from the session if it's there
+    session.pop('email', None)
     return json.dumps({'success': True}), 200, {'ContentType': 'application/json'}
 
 '''Connects to mLab's MongoDB and returns connection'''
@@ -62,7 +62,7 @@ def get_collection_fields():
     # content = request.json
     # content = jsonify({
     #     'collection':'user',
-    #     'fields': ["username", "password"]
+    #     'fields': ["email", "password"]
     # })
     if request.json is None:
         abort(400, 'No valid JSON not provided')
@@ -351,11 +351,11 @@ def handle_user():
         password = request.get_json()['password']
         fName = request.get_json()['fname']
         lName = request.get_json()['lname']
-        sc=db.users.insert({"username":email,"password":password,"first_name":fName,"last_name":lName})
+        sc=db.users.insert({"email":email,"password":password,"first_name":fName,"last_name":lName})
     elif request.method == 'PUT':
-        if not 'username' in session:
+        if not 'email' in session:
             return json.dumps({'success': False,'error':"You need to be logged in first."}), 401, {'ContentType': 'application/json'}
-        currEmail = session['username']
+        currEmail = session['email']
         email = request.get_json()['email']
         password = request.get_json()['password']
         fName = request.get_json()['fname']
@@ -363,7 +363,7 @@ def handle_user():
 
         query = {}
         if email:
-            query["username"] = email
+            query["email"] = email
         if password:
             query["password"] = password
         if fName:
@@ -374,14 +374,14 @@ def handle_user():
         '''
         query is in format of:
          {
-            'username':email,
+            'email':email,
             'password': password,
             'first_name': fName,
             'last_name': lName
         }
         '''
         sc=db.users.update(
-            {'username': currEmail},
+            {'email': currEmail},
             query
         )
 
