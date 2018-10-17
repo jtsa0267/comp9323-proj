@@ -7,6 +7,7 @@ from requests import get
 import json
 import pymongo
 from pymongo import MongoClient
+import re
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -19,19 +20,24 @@ def greet():
     return 'Hi, you are not logged in'
 
 '''Signs user in and redirects to homepage'''
-@app.route('/login', methods=['GET', 'POST'])
+@app.route('/login', methods=['POST', 'GET'])
 def login():
     if request.method == 'POST':
-        session['username'] = request.form['username']
-        return redirect(url_for('greet'))   #todo, redirect to home page instead
-    
+        username = request.form['username']
+        password = request.form['password']
+        db = connect_db()
+        res = db.users.find_one({"username": username})
+        if password==res['password']:
+            session['username'] = request.form['username']
+            return json.dumps({'success': True}), 200, {'ContentType': 'application/json'}
+    return json.dumps({'success': False,'error': 'Wrong credentials'}), 200, {'ContentType': 'application/json'}
 
 '''Logs user out and redirects to homepage'''
 @app.route('/logout')
 def logout():
     # remove the username from the session if it's there
     session.pop('username', None)
-    return redirect(url_for('greet')) #todo, redirect to home page instead
+    return json.dumps({'success': True}), 200, {'ContentType': 'application/json'}
 
 '''Connects to mLab's MongoDB and returns connection'''
 def connect_db():
@@ -82,14 +88,13 @@ def get_collection_fields():
 def search_db_recipes():
     db=connect_db()
     # print(recipes.find_one({"name": "Hot Roast Beef Sandwiches"}))
-    import re
     # regx = re.compile("beef", re.IGNORECASE)
-    # res=db.recipe.find_one({"name": regx})
+    # res=db.recipes.find_one({"name": regx})
     regx = re.compile("Sandwich", re.IGNORECASE)    #'^[work|accus*|planet]'
-    res=db.recipe.find_one({"ingredients": regx})
+    res=db.recipes.find_one({"ingredients": regx})
 
     print(res)
-    # cursor=db.recipe.find({'name':'/beef/i'})
+    # cursor=db.recipes.find({'name':'/beef/i'})
     # for document in cursor:
     #     print(document)
     # db.users.find().forEach(function(myDoc) {print("user: " + myDoc.name)} )
@@ -102,7 +107,7 @@ def insert_db_recipes():
     #TODO: change to load foreach file in folder
     with open('resources/input_file.txt', 'rb') as f:
         for row in f:
-            db.recipe.insert(json.loads(row))
+            db.recipes.insert(json.loads(row))
 
 def get_ingredient_refence():
     from re import match, sub
@@ -287,7 +292,7 @@ def get_ingredients():
 @app.route("/users/<username>", methods=['Get'])
 def insert_user(username):
     db = connect_db()
-    db.user.insert("")
+    db.users.insert("")
     abort(400, 'API not fully implemented yet ):')
 
 
