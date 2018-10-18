@@ -28,15 +28,15 @@ def login():
         res = db.users.find_one({"email": email})
         if res and password == res['password']:
             session['email'] = email
-            return json.dumps({'success': True}), 200, {'ContentType': 'application/json'}
-    return json.dumps({'success': False,'error': 'Wrong credentials'}), 200, {'ContentType': 'application/json'}
+            return dumps({'success': True}), 200, {'ContentType': 'application/json'}
+    return dumps({'success': False, 'error': 'Wrong credentials'}), 200, {'ContentType': 'application/json'}
 
 '''Logs user out and redirects to homepage'''
 @app.route('/logout')
 def logout():
     # remove the email from the session if it's there
     session.pop('email', None)
-    return json.dumps({'success': True}), 200, {'ContentType': 'application/json'}
+    return dumps({'success': True}), 200, {'ContentType': 'application/json'}
 
 '''Connects to mLab's MongoDB and returns connection'''
 def connect_db():
@@ -45,17 +45,18 @@ def connect_db():
     DB_PORT = 51112
     DB_USER = "admin" #"admin@admin.com"
     DB_PASS = "admin18"
-    pass
+
     connection = MongoClient(DB_HOST, DB_PORT)
     db = connection[DB_NAME]
     db.authenticate(DB_USER, DB_PASS)
+
     return db
 
 '''Returns requested columns from a collection
     Takes in JSON request where key1=collection, key2=columns
     https://docs.mongodb.com/manual/tutorial/project-fields-from-query-results/
 '''
-@app.route("/collection-fields", methods = ['Get','Post'])
+@app.route("/collection-fields", methods = ['Get', 'Post'])
 def get_collection_fields():
     db = connect_db()
     # content = request.json
@@ -73,7 +74,7 @@ def get_collection_fields():
     query['_id'] = 0
     for f in fields:
         query[f] = 1
-    cursor = db[col].find({},query)
+    cursor = db[col].find({}, query)
     json_docs = []
     for doc in cursor:
         json_docs.append(doc)
@@ -99,8 +100,6 @@ def search_db_recipes():
     # db.users.find().forEach(function(myDoc) {print("user: " + myDoc.name)} )
     abort(400, 'API not fully implemented yet ):')
 
-
-
 '''Inserts all scraped recipes into database'''
 def insert_db_recipes():
     db = connect_db()
@@ -108,14 +107,12 @@ def insert_db_recipes():
     #TODO: change to load foreach file in folder
     with open('resources/input_file.txt', 'rb') as f:
         for row in f:
-            db.recipes.insert(json.loads(row))
+            db.recipes.insert(loads(row))
 
 def get_ingredient_refence():
     from textblob.inflect import singularize
 
     def oxford_reference_ing():
-        from re import match, sub
-
         oxfordreference_base_url = "http://www.oxfordreference.com/view/10.1093/acref/9780199234875.001.0001/acref-9780199234875"
         tag_filter = {"class" : "contentItem oxencycl-entry locked hasCover chunkResult hi-visible p-4 border-top"}
         i, ing_list = 1, []
@@ -142,8 +139,8 @@ def get_ingredient_refence():
                         ings.append(content_split[0].strip())
                     for ing in ings:
                         if len(ing) > 2 and not ing.startswith("free ") and not ing.startswith("food ") and\
-                        not match("^.*[A-Z].*$", ing) and not match("^.*[\u2010-\u2015\-]$", ing):
-                            ing = sub("\(.*\)", "", ing).strip()
+                        not re.match("^.*[A-Z].*$", ing) and not re.match("^.*[\u2010-\u2015\-]$", ing):
+                            ing = re.sub("\(.*\)", "", ing).strip()
                             if not ing:
                                 continue
                             ing_split = ing.split(" ")
@@ -154,7 +151,6 @@ def get_ingredient_refence():
 
     def wiki_cookbook_ing():
         from bs4 import Comment
-        from re import sub
 
         def ul_children(sib):
             l = []
@@ -179,7 +175,7 @@ def get_ingredient_refence():
                 l_alphabet_ing = ul_children(sibling)
                 if l_alphabet_ing:
                     for ing in l_alphabet_ing:
-                        ing = sub("\(.*\)", "", ing).strip()
+                        ing = re.sub("\(.*\)", "", ing).strip()
                         if ing.startswith("Dairy products and ") or ing.endswith(" family"):
                             continue
                         ing_words = ing.split(",")
@@ -256,7 +252,6 @@ def get_recipes():
     get_chowdown()
 
 def scrape_ingredients():
-    from json import loads
     # from nltk.corpus import wordnet
     from os import listdir
     from textblob.inflect import singularize
@@ -345,7 +340,7 @@ def get_db_recipe(recipe_id):
         json_res = []
         for doc in res:
             print(doc)
-            json_row = json.dumps(res[doc], default = json_util.default)
+            json_row = dumps(res[doc], default = json_util.default)
             # json_row = {doc:res[doc]}
             json_res.append(json_row)
         return jsonify(json_res)
@@ -355,12 +350,12 @@ POST    - creates new user
 PUT     - updates user details.
 DELETE  - deletes user
 '''
-@app.route("/users", methods = ['POST','PUT','DELETE'])
+@app.route("/users", methods = ['POST', 'PUT', 'DELETE'])
 def handle_user():
     #check if user is logged in first
     if not 'email' in session:
-        return json.dumps({'success': False, 'error': "You need to be logged in first."}), 401, {
-            'ContentType': 'application/json'}
+        return dumps({'success': False, 'error': "You need to be logged in first."}), 401,\
+                     {'ContentType': 'application/json'}
     currEmail = session['email']
     db = connect_db()
 
@@ -375,7 +370,7 @@ def handle_user():
         password = request.get_json()['password']
         fName = request.get_json()['fname']
         lName = request.get_json()['lname']
-        sc = db.users.insert({"email":email,"password":password,"first_name":fName,"last_name":lName})
+        sc = db.users.insert({"email":email, "password":password, "first_name":fName, "last_name":lName})
     elif request.method == 'PUT':
         print(3)
         email = request.get_json()['email']
@@ -407,21 +402,21 @@ def handle_user():
             query
         )
     if sc:
-        return json.dumps({'success': True}), 200, {'ContentType': 'application/json'}
+        return dumps({'success': True}), 200, {'ContentType': 'application/json'}
     else:
-        return json.dumps({'success': False}), 401, {'ContentType': 'application/json'}
+        return dumps({'success': False}), 401, {'ContentType': 'application/json'}
 
 '''
 GET     - returns all favourited recipes for this user
 POST    - creates new favourite for a logged in user
 DELETE  - deletes favourite
 '''
-@app.route("/favourites", methods = ['GET','POST','DELETE'])
+@app.route("/favourites", methods = ['GET', 'POST', 'DELETE'])
 def handle_favourites():
     # check if user is logged in first
     if not 'email' in session:
-        return json.dumps({'success': False, 'error': "You need to be logged in first."}), 401,\
-                          {'ContentType': 'application/json'}
+        return dumps({'success': False, 'error': "You need to be logged in first."}), 401,\
+                     {'ContentType': 'application/json'}
     currEmail = session['email']
     db = connect_db()
     sc = 1
@@ -434,10 +429,11 @@ def handle_favourites():
         password = request.get_json()['password']
         fName = request.get_json()['fname']
         lName = request.get_json()['lname']
-        sc = db.users.insert({"email":email,"password":password,"first_name":fName,"last_name":lName})
+        sc = db.users.insert({"email":email, "password":password, "first_name":fName, "last_name":lName})
     elif request.method == 'PUT':
         if not 'email' in session:
-            return json.dumps({'success': False,'error':"You need to be logged in first."}), 401, {'ContentType': 'application/json'}
+            return dumps({'success': False, 'error':"You need to be logged in first."}), 401,\
+                         {'ContentType': 'application/json'}
         currEmail = session['email']
         email = request.get_json()['email']
         password = request.get_json()['password']
@@ -469,9 +465,9 @@ def handle_favourites():
         )
 
     if sc:
-        return json.dumps({'success': True}), 200, {'ContentType': 'application/json'}
+        return dumps({'success': True}), 200, {'ContentType': 'application/json'}
     else:
-        return json.dumps({'success': False}), 401, {'ContentType': 'application/json'}
+        return dumps({'success': False}), 401, {'ContentType': 'application/json'}
 
 if __name__ == '__main__':
     if not exists(resdir):
@@ -483,5 +479,3 @@ if __name__ == '__main__':
     scrape_ingredients()
     connect_db()
     app.run()
-# 1298
-# 1137
