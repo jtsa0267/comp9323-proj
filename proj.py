@@ -180,7 +180,6 @@ def get_ingredient_refence():
 #Scrape several websites for recipes
 def get_recipes():
     from datetime import datetime
-    from os import makedirs
     from time import time
 
     def get_openrecipes():
@@ -480,4 +479,4 @@ if __name__ == '__main__':
     # connect_db()
     app.run()
 
-    #1313
+#1313
