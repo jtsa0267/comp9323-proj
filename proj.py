@@ -106,13 +106,17 @@ def get_recipes():
                 f.write(str(d).replace("'", "\"") + "\n")
 
     def get_taste():
-        import re
+        id_count = -1
+        first_run_flag = True
+
         fname = "taste-recipes.json"
         if isfile(resdir + fname):
             return
-        for collection_page in range(1, 51):
+        for collection_page in range(5, 51):
+            print("COLLECTION PAGE: " + str(collection_page))
             soup = BeautifulSoup(get("https://www.taste.com.au/recipes/collections?page="+str(collection_page)+"&sort=recent").text, "html.parser")
             #for each page containing recipe folders
+
             for url in soup.find_all('article'):
                 # print(url)
                 collection_link_path = url.figure.a["href"] #/recipes/collections/indian-curry-recipes
@@ -121,74 +125,97 @@ def get_recipes():
                 #opens each recipe collection eg https://www.taste.com.au/recipes/collections/indian-curry-recipes
                 a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path).text, "html.parser")
                 #traverse each page in collection
-                num_pages = list(a_collection_page.find('div', class_="col-xs-8 pages").text)[-1]
-                print(num_pages)
-    
-                #For every page in A collection eg pages 1-8 in Indian Recipe Collection
-                for i in range(1, int(num_pages)+1):
-                    print("NEXT page: " + "https://www.taste.com.au" + collection_link_path+ "?page="+str(i)+"&q=&sort=recent")
-                    a_collection_page = a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path+ "?page="+str(i)+"&q=&sort=recent").text, "html.parser")
-            
+                if a_collection_page.find('div', class_="col-xs-8 pages"):
+                    # num_pages = list(a_collection_page.find('div', class_="col-xs-8 pages").text)[-1]
 
-                    recipe_section = a_collection_page.find(['main'])
-                    #repeat go into each recipe fpr X pages in collectoin eg in Indian food collection get each recipe
-                    for i, recipe in enumerate(recipe_section.find_all(['li'] , class_="col-xs-6")):
-                        recipe_link_path = recipe.figure.a["href"]
-                        recipe_link = BeautifulSoup(get("https://www.taste.com.au" + recipe_link_path).text, "html.parser")
-                        print(recipe_link_path)
+                    num_section = a_collection_page.find('div', class_="col-xs-8 pages")
+                    for link in num_section.find_all('a'):
+                        num_pages = link.text
+                    # print("num_pages " + num_pages)
 
-                        #open each recipe and get details
-                        d = {"source": "taste"}
-                        d["ts"] = {"$date": round(time())}
-                        d["datePublished"] = str(datetime.now().strftime("%Y-%m-%d"))
+                    # For every page in A collection eg pages 1-8 in Indian Recipe Collection
+                    for i in range(1, int(num_pages)+1):
+                        print("NEXT page: " + "https://www.taste.com.au" + collection_link_path+ "?page="+str(i)+"&q=&sort=recent")
+                        a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path+ "?page="+str(i)+"&q=&sort=recent").text, "html.parser")
+                        id_count = get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_count, first_run_flag)
 
-                        # name
-                        name = recipe_link.find(['div'] , class_="col-xs-12").h1.text
-                        d["id"] ={"$oid" : i}
-                        d["name"] = name
-                        # print(name)
-                        for recipe in recipe_link.find_all(['main'] , class_="col-xs-12"):
-                            # print(recipe.prettify())
-
-                            #ingredient
-                            for ingredient in recipe.find_all('div', class_="ingredient-description"):
-                                ing = ingredient.text
-                                d.setdefault("ing", []).append(ing)
-
-                            #method
-                            for m in recipe.find_all('div', class_="recipe-method-step-content"):
-                                method = m.text
-                                method = re.sub('\n', '',method)
-                                method = re.sub(' +', ' ',method).lstrip().rstrip()
-                                method = re.sub("[a-zA-Z0-9]'[a-zA-Z0-9]", "[a-zA-Z0-9]/[a-zA-Z0-9]'",method).lstrip().rstrip()
-                                d.setdefault("method", []).append(method)
-                                # print(method)
-
-                            #recipe info (cooktime, preptime, servings)
-                            for recipe_info_section in recipe.find_all('div', class_="cooking-info-lead-image-container col-xs-12 col-sm-8"):
-                                for info_type, info in enumerate(recipe_info_section.find_all('b')):
-                                    print(info)
-                                    if info_type == 0:
-                                        d["cookTime"] = info.text
-                                    elif info_type == 1:
-                                        d["prepTime"] = info.text
-                                    else:
-                                        d["recipeYield"] = info.text
-            
-                            #image
-                            image = recipe.img["src"]
-                            d["image"] = image
-                            # print(image)
-
-                            # print(d)
-
-                            #CREATING FILE
-                            with open(resdir + fname, "a") as f:
-                                f.write(str(d).replace("'", "\"") + "\n")
+                else: #there is only 1 page in collection
+                    a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path).text,"html.parser")
+                    id_count = get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_count, first_run_flag)
 
     get_openrecipes()
     get_chowdown()
     get_taste()
+
+def get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_count, first_run_flag):
+    import re
+    from datetime import datetime
+    from time import time
+
+    recipe_section = a_collection_page.find(['main'])
+    # repeat go into each recipe fpr X pages in collectoin eg in Indian food collection get each recipe
+    for i, recipe in enumerate(recipe_section.find_all(['li'], class_="col-xs-6")):
+        recipe_link_path = recipe.figure.a["href"]
+        recipe_link = BeautifulSoup(get("https://www.taste.com.au" + recipe_link_path).text, "html.parser")
+        d = {"url": "https://www.taste.com.au" + recipe_link_path}
+        print(recipe_link_path)
+
+        # open each recipe and get details
+        # d = {"source": "taste"}
+        d["source"] = "taste"
+        d["ts"] = {"$date": round(time())}
+        d["datePublished"] = str(datetime.now().strftime("%Y-%m-%d"))
+
+        # name
+        name = recipe_link.find(['div'], class_="col-xs-12").h1.text
+        id_count = id_count + 1
+
+
+        print("id_count " + str(id_count))
+        d["_id"] = {"$oid": id_count}
+        d["name"] = name
+
+        for recipe in recipe_link.find_all(['main'], class_="col-xs-12"):
+
+            # ingredient
+            for ingredient in recipe.find_all('div', class_="ingredient-description"):
+                ing = ingredient.text
+                d.setdefault("ingredients", []).append(ing)
+
+            # method
+            for m in recipe.find_all('div', class_="recipe-method-step-content"):
+                method = m.text
+                method = re.sub('\n', '', method)
+                method = re.sub(' +', ' ', method).lstrip().rstrip()
+                d.setdefault("method", []).append(method)
+
+            # recipe info (cooktime, preptime, servings)
+            for recipe_info_section in recipe.find_all('div', class_="cooking-info-lead-image-container col-xs-12 col-sm-8"):
+                # print(recipe_info_section)
+                for info in recipe_info_section.find_all('li'):
+                    info = info.text
+                    if "Cook" in info:
+                        d["cookTime"] = re.sub("[a-zA-Z]", "", info).strip()
+                    elif "Prep" in info:
+                        d["prepTime"] = re.sub("[a-zA-Z]", "", info).strip()
+                    elif "Makes" in info:
+                        d["recipeYield"] = re.sub("[a-zA-Z]", "", info).strip()
+                    elif "Servings" in info:
+                        d["recipeYield"] = info.strip()
+
+            # image
+            image = recipe.img["src"]
+            d["image"] = image
+
+            d["description"] = recipe.find('div', class_="single-asset-description-block").p.text
+            # print(d)
+
+            first_run_flag = False
+
+            # CREATING FILE
+            with open(resdir + fname, "a") as f:
+                f.write(str(d).replace("'", "\"") + "\n")
+    return id_count
 
 def get_ingredients():
     from json import loads
