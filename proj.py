@@ -1,14 +1,115 @@
 from bs4 import BeautifulSoup
-from flask import Flask, request, Response
+from flask import Flask, request, jsonify, abort, session, escape
+import os
 from os.path import dirname, isfile, realpath
+from os.path import exists
 from requests import get
+import json
+from bson import json_util
+from pymongo import MongoClient
+import re
 
 app = Flask(__name__)
+app.secret_key = os.urandom(24)
 resdir = dirname(realpath(__file__)) + "/resources/"
 
 @app.route("/", methods=['Get'])
 def greet():
-    return "Hi!"
+    if 'email' in session:
+        return 'Logged in as %s' % escape(session['email'])
+    return 'Hi, you are not logged in'
+
+'''Signs user in and redirects to homepage'''
+@app.route('/login', methods=['POST'])
+def login():
+    if request.method == 'POST':
+        email = request.get_json()['email']
+        password = request.get_json()['password']
+        db = connect_db()
+        res = db.users.find_one({"email": email})
+        if res and password==res['password']:
+            session['email'] = email
+            return json.dumps({'success': True}), 200, {'ContentType': 'application/json'}
+    return json.dumps({'success': False,'error': 'Wrong credentials'}), 200, {'ContentType': 'application/json'}
+
+'''Logs user out and redirects to homepage'''
+@app.route('/logout')
+def logout():
+    # remove the email from the session if it's there
+    session.pop('email', None)
+    return json.dumps({'success': True}), 200, {'ContentType': 'application/json'}
+
+'''Connects to mLab's MongoDB and returns connection'''
+def connect_db():
+    DB_NAME = "comp9323"
+    DB_HOST = "ds251112.mlab.com"
+    DB_PORT = 51112
+    DB_USER = "admin" #"admin@admin.com"
+    DB_PASS = "admin18"
+    pass
+    connection = MongoClient(DB_HOST, DB_PORT)
+    db = connection[DB_NAME]
+    db.authenticate(DB_USER, DB_PASS)
+    return db
+
+'''Returns requested columns from a collection
+    Takes in JSON request where key1=collection, key2=columns
+    https://docs.mongodb.com/manual/tutorial/project-fields-from-query-results/
+'''
+@app.route("/collection-fields", methods=['Get','Post'])
+def get_collection_fields():
+    db=connect_db()
+    # content = request.json
+    # content = jsonify({
+    #     'collection':'user',
+    #     'fields': ["email", "password"]
+    # })
+    if request.json is None:
+        abort(400, 'No valid JSON not provided')
+    else:
+        col = request.get_json()['collection']
+        fields = request.get_json()['fields']
+
+    query = {}
+    query['_id'] = 0
+    for f in fields:
+        query[f] = 1
+    cursor = db[col].find({},query)
+    json_docs = []
+    for doc in cursor:
+        json_docs.append(doc)
+    print("done getting database fields")
+    return jsonify(json_docs)
+
+'''Returns recipes that contains searched ingredients
+    Takes in JSON request where key1=array of ingredients
+'''
+@app.route("/recipes", methods=['Get'])
+def search_db_recipes():
+    db=connect_db()
+    # print(recipes.find_one({"name": "Hot Roast Beef Sandwiches"}))
+    # regx = re.compile("beef", re.IGNORECASE)
+    # res=db.recipes.find_one({"name": regx})
+    regx = re.compile("Sandwich", re.IGNORECASE)    #'^[work|accus*|planet]'
+    res=db.recipes.find_one({"ingredients": regx})
+
+    print(res)
+    # cursor=db.recipes.find({'name':'/beef/i'})
+    # for document in cursor:
+    #     print(document)
+    # db.users.find().forEach(function(myDoc) {print("user: " + myDoc.name)} )
+    abort(400, 'API not fully implemented yet ):')
+
+
+
+'''Inserts all scraped recipes into database'''
+def insert_db_recipes():
+    db=connect_db()
+    ###note: removed '$' from oid and date variables
+    #TODO: change to load foreach file in folder
+    with open('resources/input_file.txt', 'rb') as f:
+        for row in f:
+            db.recipes.insert(json.loads(row))
 
 def get_ingredient_refence():
     from textblob.inflect import singularize
@@ -100,6 +201,7 @@ def get_ingredient_refence():
         for t in sorted(l_ing):
             f.writelines(t + "\n")
 
+#Scrape several websites for recipes
 def get_recipes():
     from datetime import datetime
     from os import makedirs
@@ -130,10 +232,10 @@ def get_recipes():
         for i, tag in enumerate(soup.find_all("div", tag_filter)):
             url = chowdown_base_url + tag.a.attrs["href"]
             soup1 = BeautifulSoup(get(url).text, "lxml")
-            d = {"_id" : {"$oid" : i},
+            d = {"_id" : {"oid" : i},
                  "name" : soup1.title.contents[0],
                  "url" : url,
-                 "ts" : {"$date" : round(time())},
+                 "ts" : {"date" : round(time())},
                  "cookTime" : "P",
                  "source" : "chowdown",
                  "recipeYield" : -1,
@@ -154,7 +256,7 @@ def get_recipes():
     get_openrecipes()
     get_chowdown()
 
-def get_ingredients():
+def scrape_ingredients():
     from json import loads
     from nltk.corpus import wordnet
     from os import listdir
@@ -184,12 +286,12 @@ def get_ingredients():
     quantity_filter = "[\u2150-\u215e\u00bc-\u00be\u0030-\u0039]\s*("\
                           + units_regex + ")*(\s*\)\s*of\s+|\s+of\s+|\s*\)\s*|\s+)"\
                           + "([\u24C7\u2122\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u01bf\u01cd-\u02af\u0061-\u007a\ \-]{2,})"
-    with open(resdir + "ing_list", "r") as f:
+    with open(resdir + "ing_list", "r", encoding='utf-8') as f:
         ings = set([line.strip() for line in f])
     for fname in listdir(resdir):
         if not isfile(resdir + fname) or not fname.endswith(".json"):
             continue
-        with open(resdir + fname) as f:
+        with open(resdir + fname, encoding='utf-8') as f:
             for k, line in enumerate(f.readlines()):
                 # print(k)
                 for ing_str in re.split("\n|,", loads(line)["ingredients"].lower().strip()):
@@ -222,15 +324,168 @@ def get_ingredients():
     print(sorted(list(l_ing)))
     print(len(l_ing))
 
-if __name__ == '__main__':
-    from os.path import exists
+''' Returns all ingredients from textfile as JSON'''
+@app.route("/ingredients", methods=['Get'])
+def get_ingredients():
+    json_rows = []
+    import codecs
+    with codecs.open('resources/ing_list', 'r', encoding='unicode_escape') as f:
+        for row in f:
+            json_row = {"name":row.rstrip("\n\r")}
+            json_rows.append(json_row)
+    return jsonify(json_rows)
 
+
+'''
+GET - Returns single recipe's data e.g. name, ingredients, image, etc
+        Usage eg: http://127.0.0.1:5000/recipes/5160756d96cc62079cc2db16
+'''
+@app.route("/recipes/<recipe_id>", methods=['GET'])
+def get_db_recipe(recipe_id):
+    db = connect_db()
+    if request.method == 'GET':
+        from bson.objectid import ObjectId
+        res=db.recipes.find_one({"_id": ObjectId(recipe_id)})
+        json_res = []
+        for doc in res:
+            print(doc)
+            json_row = json.dumps(res[doc], default=json_util.default)
+            # json_row = {doc:res[doc]}
+            json_res.append(json_row)
+        return jsonify(json_res)
+
+'''
+POST    - creates new user
+PUT     - updates user details.
+DELETE  - deletes user
+'''
+@app.route("/users", methods=['POST','PUT','DELETE'])
+def handle_user():
+    #check if user is logged in first
+    if not 'email' in session:
+        return json.dumps({'success': False, 'error': "You need to be logged in first."}), 401, {
+            'ContentType': 'application/json'}
+    currEmail = session['email']
+    db = connect_db()
+
+    sc=1
+    if request.method == 'DELETE':
+        sc = db.users.delete_one({"email": currEmail})
+    elif request.json is None:
+        abort(400, 'No valid JSON not provided')
+    elif request.method == 'POST':
+        print(2)
+        email = request.get_json()['email']
+        password = request.get_json()['password']
+        fName = request.get_json()['fname']
+        lName = request.get_json()['lname']
+        sc=db.users.insert({"email":email,"password":password,"first_name":fName,"last_name":lName})
+    elif request.method == 'PUT':
+        print(3)
+        email = request.get_json()['email']
+        password = request.get_json()['password']
+        fName = request.get_json()['fname']
+        lName = request.get_json()['lname']
+
+        query = {}
+        if email:
+            query["email"] = email
+        if password:
+            query["password"] = password
+        if fName:
+            query["first_name"] = fName
+        if lName:
+            query["last_name"] = lName
+
+        '''
+        query is in format of:
+         {
+            'email':email,
+            'password': password,
+            'first_name': fName,
+            'last_name': lName
+        }
+        '''
+        sc=db.users.update(
+            {'email': currEmail},
+            query
+        )
+    if sc:
+        return json.dumps({'success': True}), 200, {'ContentType': 'application/json'}
+    else:
+        return json.dumps({'success': False}), 401, {'ContentType': 'application/json'}
+
+'''
+GET     - returns all favourited recipes for this user
+POST    - creates new favourite for a logged in user
+DELETE  - deletes favourite
+'''
+@app.route("/favourites", methods=['GET','POST','DELETE'])
+def handle_favourites():
+    # check if user is logged in first
+    if not 'email' in session:
+        return json.dumps({'success': False, 'error': "You need to be logged in first."}), 401, {
+            'ContentType': 'application/json'}
+    currEmail = session['email']
+    db = connect_db()
+    sc=1
+    if request.method == 'DELETE':
+        1# sc = db.favourites.delete_one({"email": currEmail,'recipe_name':recipe})
+    elif request.json is None:
+        abort(400, 'No valid JSON not provided')
+    elif request.method == 'POST':
+        email = request.get_json()['email']
+        password = request.get_json()['password']
+        fName = request.get_json()['fname']
+        lName = request.get_json()['lname']
+        sc=db.users.insert({"email":email,"password":password,"first_name":fName,"last_name":lName})
+    elif request.method == 'PUT':
+        if not 'email' in session:
+            return json.dumps({'success': False,'error':"You need to be logged in first."}), 401, {'ContentType': 'application/json'}
+        currEmail = session['email']
+        email = request.get_json()['email']
+        password = request.get_json()['password']
+        fName = request.get_json()['fname']
+        lName = request.get_json()['lname']
+
+        query = {}
+        if email:
+            query["email"] = email
+        if password:
+            query["password"] = password
+        if fName:
+            query["first_name"] = fName
+        if lName:
+            query["last_name"] = lName
+
+        '''
+        query is in format of:
+         {
+            'email':email,
+            'password': password,
+            'first_name': fName,
+            'last_name': lName
+        }
+        '''
+        sc=db.users.update(
+            {'email': currEmail},
+            query
+        )
+
+    if sc:
+        return json.dumps({'success': True}), 200, {'ContentType': 'application/json'}
+    else:
+        return json.dumps({'success': False}), 401, {'ContentType': 'application/json'}
+
+if __name__ == '__main__':
     if not exists(resdir):
-        makedirs(resdir)
+        import os
+        os.makedirs(resdir)
     get_ingredient_refence()
     # exit()
     get_recipes()
-    get_ingredients()
+    scrape_ingredients()
+    connect_db()
     app.run()
-
 # 1298
+# 1137
