@@ -1,7 +1,7 @@
 from bs4 import BeautifulSoup
 from bson import json_util
 from flask import Flask, request, jsonify, abort, session, escape
-from os import urandom
+from os import makedirs, urandom
 from os.path import dirname, exists, isfile, realpath
 from pymongo import MongoClient
 from requests import get
@@ -11,6 +11,7 @@ import re
 app = Flask(__name__)
 app.secret_key = urandom(24)
 resdir = dirname(realpath(__file__)) + "/resources/"
+ing_rcps = {}
 
 @app.route("/", methods = ['Get'])
 def greet():
@@ -18,7 +19,7 @@ def greet():
         return 'Logged in as %s' % escape(session['email'])
     return 'Hi, you are not logged in'
 
-'''Signs user in and redirects to homepage'''
+# Signs user in and redirects to homepage
 @app.route('/login', methods = ['POST'])
 def login():
     if request.method == 'POST':
@@ -31,19 +32,19 @@ def login():
             return dumps({'success': True}), 200, {'ContentType': 'application/json'}
     return dumps({'success': False, 'error': 'Wrong credentials'}), 200, {'ContentType': 'application/json'}
 
-'''Logs user out and redirects to homepage'''
+# Logs user out and redirects to homepage
 @app.route('/logout')
 def logout():
     # remove the email from the session if it's there
     session.pop('email', None)
     return dumps({'success': True}), 200, {'ContentType': 'application/json'}
 
-'''Connects to mLab's MongoDB and returns connection'''
+# Connects to mLab's MongoDB and returns connection
 def connect_db():
     DB_NAME = "comp9323"
     DB_HOST = "ds251112.mlab.com"
     DB_PORT = 51112
-    DB_USER = "admin" #"admin@admin.com"
+    DB_USER = "admin" # "admin@admin.com"
     DB_PASS = "admin18"
 
     connection = MongoClient(DB_HOST, DB_PORT)
@@ -52,10 +53,9 @@ def connect_db():
 
     return db
 
-'''Returns requested columns from a collection
-    Takes in JSON request where key1=collection, key2=columns
-    https://docs.mongodb.com/manual/tutorial/project-fields-from-query-results/
-'''
+# Returns requested columns from a collection
+# Takes in JSON request where key1=collection, key2=columns
+# https://docs.mongodb.com/manual/tutorial/project-fields-from-query-results/
 @app.route("/collection-fields", methods = ['Get', 'Post'])
 def get_collection_fields():
     db = connect_db()
@@ -81,9 +81,8 @@ def get_collection_fields():
     print("done getting database fields")
     return jsonify(json_docs)
 
-'''Returns recipes that contains searched ingredients
-    Takes in JSON request where key1=array of ingredients
-'''
+# Returns recipes that contains searched ingredients
+# Takes in JSON request where key1=array of ingredients
 @app.route("/recipes", methods = ['Get'])
 def search_db_recipes():
     db = connect_db()
@@ -100,11 +99,11 @@ def search_db_recipes():
     # db.users.find().forEach(function(myDoc) {print("user: " + myDoc.name)} )
     abort(400, 'API not fully implemented yet ):')
 
-'''Inserts all scraped recipes into database'''
+# Inserts all scraped recipes into database
 def insert_db_recipes():
     db = connect_db()
     ###note: removed '$' from oid and date variables
-    #TODO: change to load foreach file in folder
+    # TODO: change to load foreach file in folder
     with open('resources/input_file.txt', 'rb') as f:
         for row in f:
             db.recipes.insert(loads(row))
@@ -227,7 +226,7 @@ def get_recipes():
         for i, tag in enumerate(soup.find_all("div", tag_filter)):
             url = chowdown_base_url + tag.a.attrs["href"]
             soup1 = BeautifulSoup(get(url).text, "lxml")
-            d = {"_id" : {"oid" : i},
+            d = {"_id" : {"oid" : "chowdown" + str(i)},
                  "name" : soup1.title.contents[0],
                  "url" : url,
                  "ts" : {"date" : round(time())},
@@ -270,7 +269,7 @@ def scrape_ingredients():
                       key = lambda x: x.count,\
                       reverse = True)[0].term
 
-    units_regex, units_set, l_ing, ings = "", set(), set(), set()
+    units_regex, units_set, ings = "", set(), set()
     with open(resdir + "units", "r") as f:
         tmp = [line.strip() for line in f]
         units_regex = re.sub("(\.|\#)", r"\\\1", "|".join(tmp))
@@ -278,6 +277,7 @@ def scrape_ingredients():
     quantity_filter = "[\u2150-\u215e\u00bc-\u00be\u0030-\u0039]\s*("\
                           + units_regex + ")*(\s*\)\s*of\s+|\s+of\s+|\s*\)\s*|\s+)"\
                           + "([\u24C7\u2122\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u01bf\u01cd-\u02af\u0061-\u007a\ \-]{2,})"
+    d_ing = {}
     with open(resdir + "ing_list", "r", encoding = 'utf-8') as f:
         ings = set([line.strip() for line in f])
     for fname in listdir(resdir):
@@ -286,7 +286,12 @@ def scrape_ingredients():
         with open(resdir + fname, encoding = 'utf-8') as f:
             for k, line in enumerate(f.readlines()):
                 # print(k)
-                for ing_str in re.split("\n|,", loads(line)["ingredients"].lower().strip()):
+                ing_line, recipe_id = loads(line), ""
+                if "$oid" in ing_line["_id"]:
+                    recipe_id = ing_line["_id"]["$oid"]
+                else:
+                    recipe_id = ing_line["_id"]["oid"]
+                for ing_str in re.split("\n|,", ing_line["ingredients"].lower().strip()):
                     ing_str = re.findall(quantity_filter, ing_str)
                     if not ing_str or len(ing_str) > 1:
                         continue
@@ -312,25 +317,20 @@ def scrape_ingredients():
                             break
                         ing = ing.strip()
                         if len(ing) > 2:
-                            l_ing.add(ing.strip())
-    print(sorted(list(l_ing)))
-    print(len(l_ing))
+                            ing = ing.strip()
+                            if ing not in d_ing.keys():
+                                d_ing[ing] = set()
+                            d_ing[ing].add(recipe_id)
 
-''' Returns all ingredients from textfile as JSON'''
+    return d_ing
+
+# Returns all ingredients scraped from recipes
 @app.route("/ingredients", methods = ['Get'])
 def get_ingredients():
-    json_rows = []
-    import codecs
-    with codecs.open('resources/ing_list', 'r', encoding = 'unicode_escape') as f:
-        for row in f:
-            json_row = {"name":row.rstrip("\n\r")}
-            json_rows.append(json_row)
-    return jsonify(json_rows)
+    return dumps({"ingredients" : sorted(list(ing_rcps.keys()))})
 
-'''
-GET - Returns single recipe's data e.g. name, ingredients, image, etc
-        Usage eg: http://127.0.0.1:5000/recipes/5160756d96cc62079cc2db16
-'''
+# GET - Returns single recipe's data e.g. name, ingredients, image, etc
+# Usage eg: http://127.0.0.1:5000/recipes/5160756d96cc62079cc2db16
 @app.route("/recipes/<recipe_id>", methods = ['GET'])
 def get_db_recipe(recipe_id):
     db = connect_db()
@@ -345,11 +345,9 @@ def get_db_recipe(recipe_id):
             json_res.append(json_row)
         return jsonify(json_res)
 
-'''
-POST    - creates new user
-PUT     - updates user details.
-DELETE  - deletes user
-'''
+# POST    - creates new user
+# PUT     - updates user details.
+# DELETE  - deletes user
 @app.route("/users", methods = ['POST', 'PUT', 'DELETE'])
 def handle_user():
     #check if user is logged in first
@@ -406,11 +404,9 @@ def handle_user():
     else:
         return dumps({'success': False}), 401, {'ContentType': 'application/json'}
 
-'''
-GET     - returns all favourited recipes for this user
-POST    - creates new favourite for a logged in user
-DELETE  - deletes favourite
-'''
+# GET     - returns all favourited recipes for this user
+# POST    - creates new favourite for a logged in user
+# DELETE  - deletes favourite
 @app.route("/favourites", methods = ['GET', 'POST', 'DELETE'])
 def handle_favourites():
     # check if user is logged in first
@@ -471,11 +467,13 @@ def handle_favourites():
 
 if __name__ == '__main__':
     if not exists(resdir):
-        import os
-        os.makedirs(resdir)
+        makedirs(resdir)
     get_ingredient_refence()
     # exit()
     get_recipes()
-    scrape_ingredients()
-    connect_db()
+    # exit()
+    ing_rcps = scrape_ingredients()
+    # connect_db()
     app.run()
+
+    #1313
