@@ -319,7 +319,7 @@ def get_ingredients():
 def get_db_recipe(recipe_id = ""):
     if request.url_rule.rule == '/recipes':
         if 'ingredients' not in request.args:
-            return dumps({"result" : "missing parameter"}), 400
+            return dumps({"result" : "missing ingredients parameter"}), 400
         l_ing = request.args.get('ingredients')
 
     db = connect_db()
