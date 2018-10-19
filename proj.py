@@ -331,29 +331,24 @@ def scrape_ingredients():
 def get_ingredients():
     return dumps({"ingredients" : sorted(list(ing_rcps.keys()))}), 200
 
-'''
-GET - Returns all recipes' data e.g. name, ingredients, image, etc
-        Usage eg: http://127.0.0.1:5000/recipes
-'''
+# GET /recipes -  Returns all recipes' data e.g. name, ingredients, image, etc
+# Usage eg: http://127.0.0.1:5000/recipes
+# GET /recipes-search - Returns single recipe's data e.g. name, ingredients, image, etc
+# Usage eg: http://127.0.0.1:5000/recipes-search?ingredients=onion,carrot
+#           http://127.0.0.1:5000/recipes/5160756d96cc62079cc2db16,chowdown0
 @app.route("/recipes", methods=['GET'])
-def get_db_recipes():
+@app.route("/recipes/<recipe_ids>", methods = ["GET"])
+@app.route("/recipes-search", methods = ["GET"])
+def get_db_recipe(recipe_ids = "", size = 80):
     db = connect_db()
-    if request.method == 'GET':
-        from bson.objectid import ObjectId
-        res=db.recipes.find()
+    if request.url_rule.rule == '/recipes':
+        res=db.tasteRecipes.find()
         recipe_array = []
         for doc in res:
             recipe_array.append(doc)
-        array_sanitized = json.loads(json_util.dumps(recipe_array))
+        array_sanitized = loads(json_util.dumps(recipe_array))
         return jsonify(array_sanitized)
-
-# GET - Returns single recipe's data e.g. name, ingredients, image, etc
-# Usage eg: http://127.0.0.1:5000/recipes?ingredients=onion,carrot
-#           http://127.0.0.1:5000/recipes/5160756d96cc62079cc2db16,chowdown0
-@app.route("/recipes", methods = ["GET"])
-@app.route("/recipes/<recipe_ids>", methods = ["GET"])
-def get_db_recipe(recipe_ids = "", size = 80):
-    if request.url_rule.rule == '/recipes':
+    if request.url_rule.rule == '/recipes-search':
         if "ingredients" not in request.args:
             return dumps({"result" : "missing ingredients parameter"}), 400
         l_ing = request.args.get("ingredients")
@@ -363,7 +358,6 @@ def get_db_recipe(recipe_ids = "", size = 80):
         except ValueError:
             pass
 
-    db = connect_db()
     if recipe_ids:
         # from bson.objectid import ObjectId
 
@@ -418,49 +412,47 @@ def handle_users():
         fName = request.get_json()['first_name']
         lName = request.get_json()['last_name']
         sc = db.users.insert({"email": email, "password": password, "first_name": fName, "last_name": lName})
+    else:
+        #Following methods require user to be logged in
+        if not 'email' in session:
+            return dumps({'success': False, 'error': "You need to be logged in first."}), 401,\
+                         {'ContentType': 'application/json'}
+        currEmail = session['email']
 
-        return json.dumps({'success': True}), 200, {'ContentType': 'application/json'}
+        if request.method == "DELETE":
+            sc = db.users.delete_one({"email": currEmail})
+        elif request.json is None:
+            abort(400, 'No valid JSON not provided')
+        elif request.method == "PUT":
+            print(3)
+            email = request.get_json()['email']
+            password = request.get_json()['password']
+            fName = request.get_json()['fname']
+            lName = request.get_json()['lname']
 
-    #Following methods require user to be logged in
-    if not 'email' in session:
-        return dumps({'success': False, 'error': "You need to be logged in first."}), 401,\
-                     {'ContentType': 'application/json'}
-    currEmail = session['email']
+            query = {}
+            if email:
+                query["email"] = email
+            if password:
+                query["password"] = password
+            if fName:
+                query["first_name"] = fName
+            if lName:
+                query["last_name"] = lName
 
-    if request.method == "DELETE":
-        sc = db.users.delete_one({"email": currEmail})
-    elif request.json is None:
-        abort(400, 'No valid JSON not provided')
-    elif request.method == "PUT":
-        print(3)
-        email = request.get_json()['email']
-        password = request.get_json()['password']
-        fName = request.get_json()['fname']
-        lName = request.get_json()['lname']
-
-        query = {}
-        if email:
-            query["email"] = email
-        if password:
-            query["password"] = password
-        if fName:
-            query["first_name"] = fName
-        if lName:
-            query["last_name"] = lName
-
-        '''
-        query is in format of:
-         {
-            'email':email,
-            'password': password,
-            'first_name': fName,
-            'last_name': lName
-        }
-        '''
-        sc = db.users.update(
-            {'email': currEmail},
-            query
-        )
+            '''
+            query is in format of:
+             {
+                'email':email,
+                'password': password,
+                'first_name': fName,
+                'last_name': lName
+            }
+            '''
+            sc = db.users.update(
+                {'email': currEmail},
+                query
+            )
     if sc:
         return dumps({'success': True}), 200, {'ContentType': 'application/json'}
     else:
@@ -473,7 +465,7 @@ def handle_users():
 def handle_favourites():
     # check if user is logged in first
     if not 'email' in session:
-        return json.dumps({'success': False, 'error': "You need to be logged in first."}), 401, {
+        return dumps({'success': False, 'error': "You need to be logged in first."}), 401, {
             'ContentType': 'application/json'}
     currEmail = session['email']
     db = connect_db()
@@ -492,9 +484,9 @@ def handle_favourites():
         sc = db.favourites.insert({"email": currEmail, "recipe_id": recipe_id})
 
     if sc:
-        return json.dumps({'success': True}), 200, {'ContentType': 'application/json'}
+        return dumps({'success': True}), 200, {'ContentType': 'application/json'}
     else:
-        return json.dumps({'success': False}), 401, {'ContentType': 'application/json'}
+        return dumps({'success': False}), 401, {'ContentType': 'application/json'}
 
 # DELETE  - deletes specified favourite
 @app.route("/favourites/<recipe_id>", methods = ["DELETE"])
