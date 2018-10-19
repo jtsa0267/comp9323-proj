@@ -328,11 +328,16 @@ def get_ingredients():
 #           http://127.0.0.1:5000/recipes/5160756d96cc62079cc2db16,chowdown0
 @app.route("/recipes", methods = ["GET"])
 @app.route("/recipes/<recipe_ids>", methods = ["GET"])
-def get_db_recipe(recipe_ids = ""):
+def get_db_recipe(recipe_ids = "", size = 80):
     if request.url_rule.rule == '/recipes':
-        if 'ingredients' not in request.args:
+        if "ingredients" not in request.args:
             return dumps({"result" : "missing ingredients parameter"}), 400
-        l_ing = request.args.get('ingredients')
+        l_ing = request.args.get("ingredients")
+    if "size" in request.args:
+        try:
+            size = int(request.args.get("size"))
+        except ValueError:
+            pass
 
     db = connect_db()
     if recipe_ids:
@@ -360,19 +365,21 @@ def get_db_recipe(recipe_ids = ""):
             line = loads(line)
             if line["_id"]["$oid"] in recipe_ids:
                 recipes.append(line)
+                if len(recipes) == size:
+                    break
 
-        return dumps({"result" : recipes}), 200
+        return dumps({"result" : recipes, "size" : len(recipes)}), 200
     else:
         tmp = set()
-
         for i, ing in enumerate(l_ing.strip().lower().split(',')):
             ing = ing.strip()
             if i == 0:
                 tmp = ing_rcps[ing]
             else:
                 tmp = tmp.intersection(ing_rcps[ing])
+        recipes = loads(get_db_recipe(",".join(tmp), size)[0])["result"]
 
-        return dumps({"result" : loads(get_db_recipe(",".join(tmp))[0])["result"]}), 200
+        return dumps({"result" : recipes, "size" : len(recipes)}), 200
 
 # POST    - creates new user
 # PUT     - updates user details.
