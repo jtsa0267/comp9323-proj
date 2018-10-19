@@ -124,9 +124,13 @@ def insert_db_recipes():
     db=connect_db()
     ###note: removed '$' from oid and date variables
     #TODO: change to load foreach file in folder
-    with open('resources/input_file.txt', 'rb') as f:
-        for row in f:
-            db.recipes.insert(json.loads(row))
+    ##loads text files
+    # with open('resources/taste-recipes-final.json', 'rb') as f:
+    #     for row in f:
+    #         db.recipes.insert(json.loads(row))
+    from bson import json_util
+    data = json_util.loads(open("resources/taste-recipes-final.json", 'r', encoding='utf-8').read())
+    db.testRecipes.insert(data)
 
 def get_ingredient_refence():
     from textblob.inflect import singularize
@@ -363,11 +367,11 @@ def get_db_recipes():
     if request.method == 'GET':
         from bson.objectid import ObjectId
         res=db.recipes.find()
-        json_res = []
+        recipe_array = []
         for doc in res:
-            json_row = json.dumps(doc, default=json_util.default)
-            json_res.append(json_row)
-        return jsonify(json_res)
+            recipe_array.append(doc)
+        array_sanitized = json.loads(json_util.dumps(recipe_array))
+        return jsonify(array_sanitized)
 
 '''
 GET - Returns single recipe's data e.g. name, ingredients, image, etc
