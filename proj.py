@@ -342,7 +342,7 @@ def get_ingredients():
 def get_db_recipe(recipe_ids = "", size = 80):
     db = connect_db()
     if request.url_rule.rule == '/recipes':
-        res=db.tasteRecipes.find()
+        res=db.recipes.find()
         recipe_array = []
         for doc in res:
             recipe_array.append(doc)
