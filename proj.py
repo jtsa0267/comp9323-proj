@@ -1,7 +1,7 @@
 from bs4 import BeautifulSoup
 from bson import json_util
 from flask import Flask, request, jsonify, abort, session, escape
-from os import makedirs, urandom
+from os import listdir, makedirs, urandom
 from os.path import dirname, exists, isfile, realpath
 from pymongo import MongoClient
 from requests import get
@@ -84,11 +84,16 @@ def get_collection_fields():
 # Inserts all scraped recipes into database
 def insert_db_recipes():
     db = connect_db()
-    ###note: removed '$' from oid and date variables
-    # TODO: change to load foreach file in folder
-    with open('resources/input_file.txt', 'rb') as f:
-        for row in f:
-            db.recipes.insert(loads(row))
+    db.recipes.drop()
+    for fname in listdir(resdir):
+        if not isfile(resdir + fname) or not fname.endswith(".json"):
+            continue
+        with open(resdir + fname, encoding = 'utf-8') as f:
+            for line in f.readlines():
+                recipe_obj = loads(line)
+                del recipe_obj["_id"]
+                recipe_obj["ts"]["date"] = recipe_obj["ts"].pop("$date")
+                db.recipes.insert(recipe_obj)
 
 def get_ingredient_refence():
     from textblob.inflect import singularize
@@ -177,7 +182,7 @@ def get_ingredient_refence():
         for t in sorted(l_ing):
             f.writelines(t + "\n")
 
-#Scrape several websites for recipes
+# Scrape several websites for recipes
 def get_recipes():
     from datetime import datetime
     from time import time
@@ -197,20 +202,26 @@ def get_recipes():
                     copyfileobj(f_in, f_out)
             remove(resdir + fname + ".gz")
 
+            return True
+
+        return False
+
     def get_chowdown():
         fname = "chowdown-recipes.json"
+
         if isfile(resdir + fname):
-            return
+            return False
+
         chowdown_base_url = "http://chowdown.io"
         soup = BeautifulSoup(get(chowdown_base_url).text, "lxml")
         tag_filter = {"class" : "sm-col sm-col-6 md-col-6 lg-col-4 xs-px1 xs-mb2"}
         for i, tag in enumerate(soup.find_all("div", tag_filter)):
             url = chowdown_base_url + tag.a.attrs["href"]
             soup1 = BeautifulSoup(get(url).text, "lxml")
-            d = {"_id" : {"oid" : "chowdown" + str(i)},
+            d = {"_id" : {"$oid" : "chowdown" + str(i)},
                  "name" : soup1.title.contents[0],
                  "url" : url,
-                 "ts" : {"date" : round(time())},
+                 "ts" : {"$date" : round(time())},
                  "cookTime" : "P",
                  "source" : "chowdown",
                  "recipeYield" : -1,
@@ -228,12 +239,14 @@ def get_recipes():
             with open(resdir + fname, "a") as f:
                 f.write(str(d).replace("'", "\"") + "\n")
 
-    get_openrecipes()
-    get_chowdown()
+        return True
+
+    if get_openrecipes() or get_chowdown():
+        pass
+        # insert_db_recipes()
 
 def scrape_ingredients():
     # from nltk.corpus import wordnet
-    from os import listdir
     from textblob.inflect import singularize
 
     def symspell_correction(misspelled):
@@ -312,41 +325,54 @@ def get_ingredients():
 
 # GET - Returns single recipe's data e.g. name, ingredients, image, etc
 # Usage eg: http://127.0.0.1:5000/recipes?ingredients=onion,carrot
-#           http://127.0.0.1:5000/recipes/5160756d96cc62079cc2db16
+#           http://127.0.0.1:5000/recipes/5160756d96cc62079cc2db16,chowdown0
 @app.route("/recipes", methods = ["GET"])
-@app.route("/recipes/<recipe_id>", methods = ["GET"])
-def get_db_recipe(recipe_id = ""):
+@app.route("/recipes/<recipe_ids>", methods = ["GET"])
+def get_db_recipe(recipe_ids = ""):
     if request.url_rule.rule == '/recipes':
         if 'ingredients' not in request.args:
             return dumps({"result" : "missing ingredients parameter"}), 400
         l_ing = request.args.get('ingredients')
 
     db = connect_db()
-    if recipe_id:
-        return "", 200
+    if recipe_ids:
+        # from bson.objectid import ObjectId
 
-        from bson.objectid import ObjectId
+        # res = db.recipes.find_one({"_id": ObjectId(recipe_ids)})
+        # json_res = []
+        # for doc in res:
+        #     # print(doc)
+        #     json_row = dumps(res[doc], default = json_util.default)
+        #     # json_row = {doc:res[doc]}
+        #     json_res.append(json_row)
+        #
+        # return jsonify(json_res), 200
 
-        res = db.recipes.find_one({"_id": ObjectId(recipe_id)})
-        json_res = []
-        for doc in res:
-            print(doc)
-            json_row = dumps(res[doc], default = json_util.default)
-            # json_row = {doc:res[doc]}
-            json_res.append(json_row)
+        recipe_ids = sorted(recipe_ids.strip().lower().split(","))
+        lines, recipes = [], []
+        for fname in listdir(resdir):
+            if not isfile(resdir + fname) or not fname.endswith(".json"):
+                continue
+            with open(resdir + fname, encoding = 'utf-8') as f:
+                lines = lines + f.readlines()
+        for i, line in enumerate(lines):
+            # print(i)
+            line = loads(line)
+            if line["_id"]["$oid"] in recipe_ids:
+                recipes.append(line)
 
-        return jsonify(json_res)
+        return dumps({"result" : recipes}), 200
     else:
-        recipe_ids = set()
+        tmp = set()
 
         for i, ing in enumerate(l_ing.strip().lower().split(',')):
             ing = ing.strip()
             if i == 0:
-                recipe_ids = ing_rcps[ing]
+                tmp = ing_rcps[ing]
             else:
-                recipe_ids.intersection(ing_rcps[ing])
+                tmp = tmp.intersection(ing_rcps[ing])
 
-        return dumps({"result" : sorted(list(recipe_ids))}), 200
+        return dumps({"result" : loads(get_db_recipe(",".join(tmp))[0])["result"]}), 200
 
 # POST    - creates new user
 # PUT     - updates user details.
@@ -472,11 +498,9 @@ if __name__ == '__main__':
     if not exists(resdir):
         makedirs(resdir)
     get_ingredient_refence()
-    # exit()
     get_recipes()
-    # exit()
     ing_rcps = scrape_ingredients()
-    # connect_db()
     app.run()
+    # app.run(port = "5001")
 
 #1313
