@@ -2,6 +2,16 @@ from bs4 import BeautifulSoup
 from flask import Flask, request, Response
 from os.path import dirname, isfile, realpath
 from requests import get
+from bs4 import BeautifulSoup
+from flask import Flask, request, jsonify, abort, session, escape
+import os
+from os.path import dirname, isfile, realpath
+from os.path import exists
+from requests import get
+import json
+from bson import json_util
+from pymongo import MongoClient
+import re
 
 app = Flask(__name__)
 resdir = dirname(realpath(__file__)) + "/resources/"
@@ -13,6 +23,37 @@ def greet():
 @app.route("/something", methods=['Get'])
 def something():
     return "soemthing"
+
+'''Connects to mLab's MongoDB and returns connection'''
+
+def connect_db():
+    DB_NAME = "comp9323"
+    DB_HOST = "ds251112.mlab.com"
+    DB_PORT = 51112
+    DB_USER = "admin"  # "admin@admin.com"
+    DB_PASS = "admin18"
+    connection = MongoClient(DB_HOST, DB_PORT)
+    db = connection[DB_NAME]
+    db.authenticate(DB_USER, DB_PASS)
+
+    return db
+
+def insert_db_recipes():
+    print("before db connect")
+    db = connect_db()
+    print("after db connect")
+    import json
+    from bson import json_util
+    import pymongo
+
+    ###note: removed '$' from oid and date variables
+    # TODO: change to load foreach file in folder
+    print("start")
+    from bson import json_util
+    data = json_util.loads(open("resources/taste-recipes-final.json", 'r').read())
+    db.tasteRecipes.insert(data)
+
+    print("finsih")
 
 def get_ingredient_refence():
     from re import match, sub
@@ -109,10 +150,10 @@ def get_recipes():
         id_count = -1
         first_run_flag = True
 
-        fname = "taste-recipes.json"
+        fname = "taste-recipes-final.json"
         if isfile(resdir + fname):
             return
-        for collection_page in range(5, 51):
+        for collection_page in range(1, 51):
             print("COLLECTION PAGE: " + str(collection_page))
             soup = BeautifulSoup(get("https://www.taste.com.au/recipes/collections?page="+str(collection_page)+"&sort=recent").text, "html.parser")
             #for each page containing recipe folders
@@ -157,14 +198,14 @@ def get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_cou
     for i, recipe in enumerate(recipe_section.find_all(['li'], class_="col-xs-6")):
         recipe_link_path = recipe.figure.a["href"]
         recipe_link = BeautifulSoup(get("https://www.taste.com.au" + recipe_link_path).text, "html.parser")
-        d = {"url": "https://www.taste.com.au" + recipe_link_path}
+        d = {"||url||": "||"+"https://www.taste.com.au" + recipe_link_path+"||"}
         print(recipe_link_path)
 
         # open each recipe and get details
         # d = {"source": "taste"}
-        d["source"] = "taste"
-        d["ts"] = {"$date": round(time())}
-        d["datePublished"] = str(datetime.now().strftime("%Y-%m-%d"))
+        d["||source||"] = "||"+"taste"+"||"
+        d["||ts||"] = {"||date||": round(time())}
+        d["||datePublished||"] = "||"+str(datetime.now().strftime("%Y-%m-%d"))+"||"
 
         # name
         name = recipe_link.find(['div'], class_="col-xs-12").h1.text
@@ -172,22 +213,22 @@ def get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_cou
 
 
         print("id_count " + str(id_count))
-        d["_id"] = {"$oid": id_count}
-        d["name"] = name
+        # d["_id"] = {"$oid": id_count}
+        d["||name||"] = "||"+name+"||".replace("'", "").replace("\"", "")
 
         for recipe in recipe_link.find_all(['main'], class_="col-xs-12"):
 
             # ingredient
             for ingredient in recipe.find_all('div', class_="ingredient-description"):
                 ing = ingredient.text
-                d.setdefault("ingredients", []).append(ing)
+                d.setdefault("||ingredients||", []).append("||"+ing+"||".replace("\"", ""))
 
             # method
             for m in recipe.find_all('div', class_="recipe-method-step-content"):
                 method = m.text
                 method = re.sub('\n', '', method)
                 method = re.sub(' +', ' ', method).lstrip().rstrip()
-                d.setdefault("method", []).append(method)
+                d.setdefault("||method||", []).append("||"+method+"||".replace("\"", ""))
 
             # recipe info (cooktime, preptime, servings)
             for recipe_info_section in recipe.find_all('div', class_="cooking-info-lead-image-container col-xs-12 col-sm-8"):
@@ -195,26 +236,30 @@ def get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_cou
                 for info in recipe_info_section.find_all('li'):
                     info = info.text
                     if "Cook" in info:
-                        d["cookTime"] = re.sub("[a-zA-Z]", "", info).strip()
+                        cook = re.sub("[a-zA-Z]", "", info).strip()
+                        # //"0:10"        ==> "||0:10||"      ==> '||0:10||'      --> sed '||     ||'
+                        d["||cookTime||"] = "||"+cook+"||"
                     elif "Prep" in info:
-                        d["prepTime"] = re.sub("[a-zA-Z]", "", info).strip()
+                        d["||prepTime||"] = "||"+re.sub("[a-zA-Z]", "", info).strip()+"||"
                     elif "Makes" in info:
-                        d["recipeYield"] = re.sub("[a-zA-Z]", "", info).strip()
+                        # d["||recipeYield||"] = "||"+re.sub("[a-zA-Z]", "", info).strip()+"||"
+                        d["||recipeYield||"] = "||"+info.strip()+"||"
                     elif "Servings" in info:
-                        d["recipeYield"] = info.strip()
+                        d["||recipeYield||"] = "||"+info.strip()+"||"
 
             # image
             image = recipe.img["src"]
-            d["image"] = image
+            d["||image||"] = "||"+image+"||"
 
-            d["description"] = recipe.find('div', class_="single-asset-description-block").p.text
+            d["||description||"] = "||"+recipe.find('div', class_="single-asset-description-block").p.text.replace("\"", "")+"||"
             # print(d)
 
             first_run_flag = False
 
             # CREATING FILE
             with open(resdir + fname, "a") as f:
-                f.write(str(d).replace("'", "\"") + "\n")
+                f.write(str(d).replace("'||", "\"").replace("||'", "\"").replace("||", "").replace('\\xa0', '')+ "\n,")
+
     return id_count
 
 def get_ingredients():
@@ -285,6 +330,9 @@ def get_ingredients():
     print(sorted(list(l_ing)))
     print(len(l_ing))
 
+
+
+
 if __name__ == '__main__':
     from os.path import exists
 
@@ -292,6 +340,7 @@ if __name__ == '__main__':
         makedirs(resdir)
     get_ingredient_refence()
     # exit()
+    # insert_db_recipes()
     get_recipes()
     get_ingredients()
 
