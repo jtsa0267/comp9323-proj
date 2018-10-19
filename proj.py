@@ -91,7 +91,7 @@ def insert_db_recipes():
         with open(resdir + fname, encoding = 'utf-8') as f:
             for line in f.readlines():
                 recipe_obj = loads(line)
-                del recipe_obj["_id"]
+                recipe_obj["recipe_id"] = (recipe_obj.pop("_id"))["$oid"]
                 recipe_obj["ts"]["date"] = recipe_obj["ts"].pop("$date")
                 db.recipes.insert(recipe_obj)
 
@@ -242,8 +242,8 @@ def get_recipes():
         return True
 
     if get_openrecipes() or get_chowdown():
-        pass
-        # insert_db_recipes()
+        return
+        insert_db_recipes()
 
 def scrape_ingredients():
     # from nltk.corpus import wordnet
