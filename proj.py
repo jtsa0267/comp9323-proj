@@ -11,7 +11,8 @@ import re
 app = Flask(__name__)
 app.secret_key = urandom(24)
 resdir = dirname(realpath(__file__)) + "/resources/"
-ing_rcps = {}
+ing_rcps = {} # ingredients and their list of respecitvely associated recipes
+rcp_ings = {} # recipes and how many ingredients each recipe has
 
 @app.route("/", methods = ["GET"])
 def greet():
@@ -84,7 +85,7 @@ def get_collection_fields():
 # Takes in JSON request where key1=array of ingredients
 @app.route("/cuisines", methods=['Get'])
 def search_db_cuisines():
-    db=connect_db()
+    db = connect_db()
     abort(400, 'API not fully implemented yet')
 
 # Returns recipes that contains searched ingredients
@@ -257,6 +258,7 @@ def scrape_ingredients():
     # from nltk.corpus import wordnet
     from textblob.inflect import singularize
 
+    # below function is not used
     def symspell_correction(misspelled):
         from symspellpy import SymSpell, Verbosity
 
@@ -279,7 +281,7 @@ def scrape_ingredients():
     quantity_filter = "[\u2150-\u215e\u00bc-\u00be\u0030-\u0039]\s*("\
                           + units_regex + ")*(\s*\)\s*of\s+|\s+of\s+|\s*\)\s*|\s+)"\
                           + "([\u24C7\u2122\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u01bf\u01cd-\u02af\u0061-\u007a\ \-]{2,})"
-    d_ing = {}
+    d_ing, d_rcp = {}, {}
     with open(resdir + "ing_list", "r", encoding = 'utf-8') as f:
         ings = set([line.strip() for line in f])
     for fname in listdir(resdir):
@@ -293,6 +295,7 @@ def scrape_ingredients():
                     recipe_id = ing_line["_id"]["$oid"]
                 else:
                     recipe_id = ing_line["_id"]["oid"]
+                d_rcp[recipe_id] = 0
                 for ing_str in re.split("\n|,", ing_line["ingredients"].lower().strip()):
                     ing_str = re.findall(quantity_filter, ing_str)
                     if not ing_str or len(ing_str) > 1:
@@ -323,32 +326,31 @@ def scrape_ingredients():
                             if ing not in d_ing.keys():
                                 d_ing[ing] = set()
                             d_ing[ing].add(recipe_id)
+                            d_rcp[recipe_id] = d_rcp[recipe_id] + 1
 
-    return d_ing
+    return d_ing, d_rcp
 
 # Returns all ingredients scraped from recipes
 @app.route("/ingredients", methods = ["GET"])
 def get_ingredients():
     return dumps({"ingredients" : sorted(list(ing_rcps.keys()))}), 200
 
-# GET /recipes -  Returns all recipes' data e.g. name, ingredients, image, etc
+# GET /recipes - Returns all recipes' data e.g. name, ingredients, image, etc
 # Usage eg: http://127.0.0.1:5000/recipes
-# GET /recipes-search - Returns single recipe's data e.g. name, ingredients, image, etc
-# Usage eg: http://127.0.0.1:5000/recipes-search?ingredients=onion,carrot
+#           http://127.0.0.1:5000/recipes?ingredients=onion,carrot
 #           http://127.0.0.1:5000/recipes/5160756d96cc62079cc2db16,chowdown0
 @app.route("/recipes", methods=['GET'])
 @app.route("/recipes/<recipe_ids>", methods = ["GET"])
-@app.route("/recipes-search", methods = ["GET"])
 def get_db_recipe(recipe_ids = "", size = 80):
     db = connect_db()
+    # if request.url_rule.rule == '/recipes':
+    #     res = db.recipes.find()
+    #     recipe_array = []
+    #     for doc in res:
+    #         recipe_array.append(doc)
+    #     array_sanitized = loads(json_util.dumps(recipe_array))
+    #     return jsonify(array_sanitized)
     if request.url_rule.rule == '/recipes':
-        res=db.recipes.find()
-        recipe_array = []
-        for doc in res:
-            recipe_array.append(doc)
-        array_sanitized = loads(json_util.dumps(recipe_array))
-        return jsonify(array_sanitized)
-    if request.url_rule.rule == '/recipes-search':
         if "ingredients" not in request.args:
             return dumps({"result" : "missing ingredients parameter"}), 400
         l_ing = request.args.get("ingredients")
@@ -395,6 +397,7 @@ def get_db_recipe(recipe_ids = "", size = 80):
                 tmp = ing_rcps[ing]
             else:
                 tmp = tmp.intersection(ing_rcps[ing])
+        tmp = [t for c, t in sorted([(rcp_ings[t], t) for t in tmp], key = lambda tup: tup[0])]
         recipes = loads(get_db_recipe(",".join(tmp), size)[0])["result"]
 
         return dumps({"result" : recipes, "size" : len(recipes)}), 200
@@ -465,8 +468,8 @@ def handle_users():
 def handle_favourites():
     # check if user is logged in first
     if not 'email' in session:
-        return dumps({'success': False, 'error': "You need to be logged in first."}), 401, {
-            'ContentType': 'application/json'}
+        return dumps({'success': False, 'error': "You need to be logged in first."}), 401,\
+                     {'ContentType': 'application/json'}
     currEmail = session['email']
     db = connect_db()
     if request.method == 'GET':
@@ -511,7 +514,7 @@ if __name__ == '__main__':
         makedirs(resdir)
     get_ingredient_refence()
     get_recipes()
-    ing_rcps = scrape_ingredients()
+    ing_rcps, rcp_ings = scrape_ingredients()
     app.run()
     # app.run(port = "5001")
 
