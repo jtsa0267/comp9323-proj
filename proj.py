@@ -83,7 +83,7 @@ def get_collection_fields():
 
 # Returns recipes that contains searched ingredients
 # Takes in JSON request where key1=array of ingredients (comma separated)
-@app.route("/categories", methods=['Get'])
+@app.route("/categories", methods = ['Get'])
 def search_db_categories():
     db = connect_db()
 
@@ -155,6 +155,8 @@ def search_db_categories():
 # Takes in JSON request where key1=array of ingredients
 # Inserts all scraped recipes into database
 def insert_db_recipes():
+    from bson import json_util
+
     db = connect_db()
     db.recipes.drop()
     for fname in listdir(resdir):
@@ -162,10 +164,11 @@ def insert_db_recipes():
             continue
         with open(resdir + fname, encoding = 'utf-8') as f:
             for line in f.readlines():
-                recipe_obj = loads(line)
-                recipe_obj["recipe_id"] = (recipe_obj.pop("_id"))["$oid"]
-                recipe_obj["ts"]["date"] = recipe_obj["ts"].pop("$date")
-                db.recipes.insert(recipe_obj)
+                try:
+                    recipe_obj = json_util.loads(line)
+                    db.recipes.insert(recipe_obj)
+                except:
+                    print(row)
 
 def get_ingredient_refence():
     from textblob.inflect import singularize
@@ -259,7 +262,7 @@ def get_recipes():
     from datetime import datetime
     from time import time
 
-    def get_openrecipes():
+    def get_openrecipes(): # made redundant since recipes don't have methods
         from os import chdir, remove
         from shutil import copyfileobj
         from wget import download
@@ -290,10 +293,9 @@ def get_recipes():
         for i, tag in enumerate(soup.find_all("div", tag_filter)):
             url = chowdown_base_url + tag.a.attrs["href"]
             soup1 = BeautifulSoup(get(url).text, "lxml")
-            d = {"_id" : {"$oid" : "chowdown" + str(i)},
-                 "name" : soup1.title.contents[0],
+            d = {"name" : soup1.title.contents[0],
                  "url" : url,
-                 "ts" : {"$date" : round(time())},
+                 "ts" : {"date" : round(time())},
                  "cookTime" : "P",
                  "source" : "chowdown",
                  "recipeYield" : -1,
@@ -311,14 +313,76 @@ def get_recipes():
             with open(resdir + fname, "a") as f:
                 f.write(str(d).replace("'", "\"") + "\n")
 
-    def get_taste():
-        id_count = -1
+        return True
 
+    def get_taste():
+        def get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_count, first_run_flag):
+            recipe_section = a_collection_page.find(['main'])
+            # repeat go into each recipe for X pages in collectoin e.g. in Indian food collection get each recipe
+            for i, recipe in enumerate(recipe_section.find_all(['li'], class_ = "col-xs-6")):
+                recipe_link_path = recipe.figure.a["href"]
+                recipe_link = BeautifulSoup(get("https://www.taste.com.au" + recipe_link_path).text, "html.parser")
+                d = {"||url||": "||" + "https://www.taste.com.au" + recipe_link_path + "||"}
+                print(recipe_link_path)
+
+                # open each recipe and get details
+                d["||source||"] = "||" + "taste" + "||"
+                d["||ts||"] = {"||date||": round(time())}
+                d["||datePublished||"] = "||" + str(datetime.now().strftime("%Y-%m-%d")) + "||"
+                d["||collectionName||"] = "||" + collection_link_path + "||"
+                #name
+                name = recipe_link.find(['div'], class_ = "col-xs-12").h1.text
+                id_count = id_count + 1
+                d["||name||"] = "||" + name + "||".replace("'", "").replace("\"", "")
+
+                for recipe in recipe_link.find_all(['main'], class_ = "col-xs-12"):
+                    # ingredient
+                    for ingredient in recipe.find_all('div', class_ = "ingredient-description"):
+                        ing = ingredient.text
+                        d.setdefault("||ingredients||", []).append("||" + ing + "||".replace("\"", ""))
+
+                    # method
+                    for m in recipe.find_all('div', class_ = "recipe-method-step-content"):
+                        method = m.text
+                        method = re.sub('\n', '', method)
+                        method = re.sub(' +', ' ', method).lstrip().rstrip()
+                        d.setdefault("||method||", []).append("||" + method + "||".replace("\"", ""))
+
+                    # recipe info (cooktime, preptime, servings)
+                    for recipe_info_section in recipe.find_all('div', class_ = "cooking-info-lead-image-container col-xs-12 col-sm-8"):
+                        for info in recipe_info_section.find_all('li'):
+                            info = info.text
+                            if "Cook" in info:
+                                cook = re.sub("[a-zA-Z]", "", info).strip()
+                                d["||cookTime||"] = "||" + cook + "||"
+                            elif "Prep" in info:
+                                d["||prepTime||"] = "||" + re.sub("[a-zA-Z]", "", info).strip() + "||"
+                            elif "Makes" in info:
+                                d["||recipeYield||"] = "||" + info.strip() + "||"
+                            elif "Servings" in info:
+                                d["||recipeYield||"] = "||" + info.strip() + "||"
+
+                    # image
+                    image = recipe.img["src"]
+                    d["||image||"] = "||" + image + "||"
+
+                    d["||description||"] = "||" + recipe.find('div', class_ = "single-asset-description-block").p.text.replace("\"", "") + "||"
+
+                    # CREATING FILE
+                    with open(resdir + fname, "a") as f:
+                        f.write(str(d).replace("'||", "\"").replace("||'", "\"").replace("||", "").replace('\\xa0', '')+ "\n")
+
+            return id_count
+
+        id_count, first_run_flag = -1, False
         fname = "taste-recipes.json"
+
         if isfile(resdir + fname):
-            return
+            return False
+
         for collection_page in range(1, 51):
-            soup = BeautifulSoup(get("https://www.taste.com.au/recipes/collections?page="+str(collection_page)+"&sort=recent").text, "html.parser")
+            soup = BeautifulSoup(get("https://www.taste.com.au/recipes/collections?page=" + str(collection_page)\
+                                                                                          + "&sort=recent").text, "html.parser")
             #for each page containing recipe folders
             for url in soup.find_all('article'):
                 collection_link_path = url.figure.a["href"]
@@ -326,106 +390,34 @@ def get_recipes():
                 #opens each recipe collection eg https://www.taste.com.au/recipes/collections/indian-curry-recipes
                 a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path).text, "html.parser")
                 #traverse each page in collection
-                if a_collection_page.find('div', class_="col-xs-8 pages"):
-                    num_section = a_collection_page.find('div', class_="col-xs-8 pages")
+                if a_collection_page.find('div', class_ = "col-xs-8 pages"):
+                    num_section = a_collection_page.find('div', class_ = "col-xs-8 pages")
                     for link in num_section.find_all('a'):
                         num_pages = link.text
                     # For every page in A collection eg pages 1-8 in Indian Recipe Collection
-                    for i in range(1, int(num_pages)+1):
-                        print("NEXT page: " + "https://www.taste.com.au" + collection_link_path+ "?page="+str(i)+"&q=&sort=recent")
-                        a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path+ "?page="+str(i)+"&q=&sort=recent").text, "html.parser")
+                    for i in range(1, int(num_pages) + 1):
+                        print("NEXT page: " + "https://www.taste.com.au" + collection_link_path+ "?page=" + str(i) + "&q=&sort=recent")
+                        a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path\
+                                                                                         + "?page=" + str(i)\
+                                                                                         + "&q=&sort=recent").text, "html.parser")
                         id_count = get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_count, first_run_flag)
 
                 else: #there is only 1 page in collection
-                    a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path).text,"html.parser")
+                    a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path).text, "html.parser")
                     id_count = get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_count, first_run_flag)
 
+        return True
+
     if get_openrecipes() or get_chowdown() or get_taste():
-        return
+        # insert_db_recipes
+        pass
 
-def get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_count, first_run_flag):
-    import re
-    from datetime import datetime
-    from time import time
-
-    recipe_section = a_collection_page.find(['main'])
-    # repeat go into each recipe fpr X pages in collectoin eg in Indian food collection get each recipe
-    for i, recipe in enumerate(recipe_section.find_all(['li'], class_="col-xs-6")):
-        recipe_link_path = recipe.figure.a["href"]
-        recipe_link = BeautifulSoup(get("https://www.taste.com.au" + recipe_link_path).text, "html.parser")
-        d = {"||url||": "||"+"https://www.taste.com.au" + recipe_link_path+"||"}
-        print(recipe_link_path)
-
-        # open each recipe and get details
-        d["||source||"] = "||"+"taste"+"||"
-        d["||ts||"] = {"||date||": round(time())}
-        d["||datePublished||"] = "||"+str(datetime.now().strftime("%Y-%m-%d"))+"||"
-        d["||collectionName||"] = "||"+collection_link_path+"||"
-        #name
-        name = recipe_link.find(['div'], class_="col-xs-12").h1.text
-        id_count = id_count + 1
-        d["||name||"] = "||"+name+"||".replace("'", "").replace("\"", "")
-
-        for recipe in recipe_link.find_all(['main'], class_="col-xs-12"):
-            # ingredient
-            for ingredient in recipe.find_all('div', class_="ingredient-description"):
-                ing = ingredient.text
-                d.setdefault("||ingredients||", []).append("||"+ing+"||".replace("\"", ""))
-
-            # method
-            for m in recipe.find_all('div', class_="recipe-method-step-content"):
-                method = m.text
-                method = re.sub('\n', '', method)
-                method = re.sub(' +', ' ', method).lstrip().rstrip()
-                d.setdefault("||method||", []).append("||"+method+"||".replace("\"", ""))
-
-            # recipe info (cooktime, preptime, servings)
-            for recipe_info_section in recipe.find_all('div', class_="cooking-info-lead-image-container col-xs-12 col-sm-8"):
-                for info in recipe_info_section.find_all('li'):
-                    info = info.text
-                    if "Cook" in info:
-                        cook = re.sub("[a-zA-Z]", "", info).strip()
-                        d["||cookTime||"] = "||"+cook+"||"
-                    elif "Prep" in info:
-                        d["||prepTime||"] = "||"+re.sub("[a-zA-Z]", "", info).strip()+"||"
-                    elif "Makes" in info:
-                        d["||recipeYield||"] = "||"+info.strip()+"||"
-                    elif "Servings" in info:
-                        d["||recipeYield||"] = "||"+info.strip()+"||"
-
-            # image
-            image = recipe.img["src"]
-            d["||image||"] = "||"+image+"||"
-
-            d["||description||"] = "||"+recipe.find('div', class_="single-asset-description-block").p.text.replace("\"", "")+"||"
-
-            first_run_flag = False
-
-            # CREATING FILE
-            with open(resdir + fname, "a") as f:
-                f.write(str(d).replace("'||", "\"").replace("||'", "\"").replace("||", "").replace('\\xa0', '')+ "\n,")
-
-    return id_count
-
-# uploads recipe file to mongodb
-def insert_db_recipes():
-    db = connect_db()
-    from bson import json_util
-    with open("resources/taste-recipes.json", "r", encoding='utf-8') as file:
-        for row in file:
-            try:
-                data = json_util.loads(row)
-                db.recipes.insert(data)
-            except:
-                print(row)
-    return "finished inserting"
-
+# ingredient scraper that looks at recipes and extract useful insight on top of indexing them for better performance
 def scrape_ingredients():
     # from nltk.corpus import wordnet
     from textblob.inflect import singularize
 
-    # below function is not used
-    def symspell_correction(misspelled):
+    def symspell_correction(misspelled): # not used because it is too expensive
         from symspellpy import SymSpell, Verbosity
 
         sym_spell = SymSpell(83000, 2)
@@ -450,62 +442,64 @@ def scrape_ingredients():
     d_ing, d_rcp = {}, {}
     with open(resdir + "ing_list", "r", encoding = 'utf-8') as f:
         ings = set([line.strip() for line in f])
-    for fname in listdir(resdir):
-        if not isfile(resdir + fname) or not fname.endswith(".json"):
-            continue
-        with open(resdir + fname, encoding = 'utf-8') as f:
-            for k, line in enumerate(f.readlines()):
-                # print(k)
-                ing_line, recipe_id = loads(line), ""
-                if "$oid" in ing_line["_id"]:
-                    recipe_id = ing_line["_id"]["$oid"]
-                else:
-                    recipe_id = ing_line["_id"]["oid"]
-                d_rcp[recipe_id] = 0
-                for ing_str in re.split("\n|,", ing_line["ingredients"].lower().strip()):
-                    ing_str = re.findall(quantity_filter, ing_str)
-                    if not ing_str or len(ing_str) > 1:
+
+    db = connect_db()
+    cursor = db.recipes.find({})
+    for k, line in enumerate(cursor):
+        print(k)
+        recipe_id = str(line["_id"])
+        d_rcp[recipe_id] = 0
+        for ing_str in line["ingredients"]:
+            ing_str = re.findall(quantity_filter, ing_str)
+            if not ing_str or len(ing_str) > 1:
+                continue
+            # maybe split on stopwords
+            for ing_str_split in re.split("\s+(and|or|with|in)\s+", ing_str[0][-1].strip()):
+                ing, ing_str_tokens = "", list(reversed(ing_str_split.split(" ")))
+                for i, token in enumerate(ing_str_tokens):
+                    token = token.strip()
+                    if not token or re.match("^[a-z]+([\u002d\u2010-\u2015][a-z]+)+$", token):
                         continue
-                    # maybe split on stopwords
-                    for ing_str_split in re.split("\s+(and|or|with|in)\s+", ing_str[0][-1].strip()):
-                        ing, ing_str_tokens = "", list(reversed(ing_str_split.split(" ")))
-                        for i, token in enumerate(ing_str_tokens):
-                            token = token.strip()
-                            if not token or re.match("^[a-z]+([\u002d\u2010-\u2015][a-z]+)+$", token):
-                                continue
-                            # if token not in ings and not wordnet.synsets(token):
-                            #     token = symspell_correction(token)
-                            if not ing:
-                                token = singularize(token)
-                            if token not in ings or token in units_set:
-                                continue
-                            ing = token
-                            for j in range(i + 1, len(ing_str_tokens)):
-                                tmp = " ".join(reversed(ing_str_tokens[i + 1 : j + 1]))
-                                if tmp + " " + ing not in ings:
-                                    ing = " ".join(reversed(ing_str_tokens[i + 1 : j])) + " " + ing
-                                    break
+                    # if token not in ings and not wordnet.synsets(token):
+                    #     token = symspell_correction(token)
+                    if not ing:
+                        token = singularize(token)
+                    if token not in ings or token in units_set:
+                        continue
+                    ing = token
+                    for j in range(i + 1, len(ing_str_tokens)):
+                        tmp = " ".join(reversed(ing_str_tokens[i + 1 : j + 1]))
+                        if tmp + " " + ing not in ings:
+                            ing = " ".join(reversed(ing_str_tokens[i + 1 : j])) + " " + ing
                             break
-                        ing = ing.strip()
-                        if len(ing) > 2:
-                            ing = ing.strip()
-                            if ing not in d_ing.keys():
-                                d_ing[ing] = set()
-                            d_ing[ing].add(recipe_id)
-                            d_rcp[recipe_id] = d_rcp[recipe_id] + 1
+                    break
+                ing = ing.strip()
+                if len(ing) > 2:
+                    ing = ing.strip()
+                    if ing not in d_ing.keys():
+                        d_ing[ing] = set()
+                    d_ing[ing].add(recipe_id)
+                    d_rcp[recipe_id] = d_rcp[recipe_id] + 1
+
+    d_ing = {key : list(value) for key, value in d_ing.items()}
+    with open(resdir + "ing_rcps", "w") as f1, open(resdir + "rcp_ings", "w") as f2:
+        f1.write(dumps(d_ing))
+        f2.write(dumps(d_rcp))
 
     return d_ing, d_rcp
 
 # Returns all ingredients scraped from recipes
 @app.route("/ingredients", methods = ["GET"])
 def get_ingredients():
-    return dumps({"ingredients" : sorted(list(ing_rcps.keys()))}), 200
+    tmp = list(ing_rcps.keys())
+
+    return dumps({"ingredients" : sorted(tmp), "size" : len(tmp)}), 200
 
 # GET /recipes - Returns all recipes' data e.g. name, ingredients, image, etc
 # Usage eg: http://127.0.0.1:5000/recipes
 #           http://127.0.0.1:5000/recipes?ingredients=onion,carrot
 #           http://127.0.0.1:5000/recipes/5160756d96cc62079cc2db16,chowdown0
-@app.route("/recipes", methods=['GET'])
+@app.route("/recipes", methods = ['GET'])
 @app.route("/recipes/<recipe_ids>", methods = ["GET"])
 def get_db_recipe(recipe_ids = "", size = 80):
     db = connect_db()
@@ -557,7 +551,7 @@ def get_db_recipe(recipe_ids = "", size = 80):
         return dumps({"result" : recipes, "size" : len(recipes)}), 200
     else:
         tmp = set()
-        for i, ing in enumerate(l_ing.strip().lower().split(',')):
+        for i, ing in enumerate(l_ing.strip().lower().split(",")):
             ing = ing.strip()
             if i == 0:
                 tmp = ing_rcps[ing]
@@ -680,8 +674,16 @@ if __name__ == '__main__':
         makedirs(resdir)
     get_ingredient_refence()
     get_recipes()
-    ing_rcps, rcp_ings = scrape_ingredients()
-    insert_db_recipes()
+
+    # check if indexing files are available for ingredient scraping
+    if not isfile(resdir + "ing_rcps") or not isfile(resdir + "rcp_ings"):
+        ing_rcps, rcp_ings = scrape_ingredients()
+    else:
+        with open(resdir + "ing_rcps", encoding = 'utf-8') as f1,\
+             open(resdir + "rcp_ings", encoding = 'utf-8') as f2:
+            ing_rcps = loads((''.join(f1.readlines())).strip())
+            rcp_ings = loads((''.join(f2.readlines())).strip())
+    # exit()
 
     app.run()
     # app.run(port = "5001")
