@@ -82,11 +82,74 @@ def get_collection_fields():
     return jsonify(json_docs)
 
 # Returns recipes that contains searched ingredients
-# Takes in JSON request where key1=array of ingredients
-@app.route("/cuisines", methods=['Get'])
-def search_db_cuisines():
+# Takes in JSON request where key1=array of ingredients (comma separated)
+@app.route("/categories", methods=['Get'])
+def search_db_categories():
     db = connect_db()
-    abort(400, 'API not fully implemented yet')
+
+    # write mongodb query to find all categories
+    categories = db.final_taste_recipes.distinct('collectionName');
+    for c in categories:
+        print(c)
+    # res = db.recipes.find({"collectionName": "dinner"});
+
+    # > hardcode list of generic categories e.g. dinner
+    '''
+    === Seasons ===
+    winter (winter
+    summer (summer
+    autumn (autumn
+
+    === Meals ===
+    soup  (soup
+    snack (biscuit, finger-food, nachos, quick-treats
+    lunch (lunch, salad, high-tea, sandwich, pikelet)
+    dinner (dinner, mains, pasta, snapper, slow-cooker-beef)
+    dessert (dessert, fruit, ice-cream, cake, mandarin, tiramisu, maple-syrup, salted-caramel, cheesecake, chocolate,
+            fudge, doughnut, marshmallow, tim-tam, crepe)
+    drinks (drinks, smoothies, pimms
+
+
+    ===event===
+    barbecue (barbecue
+    birthday (birthday
+    christmas (has collection)
+    easter (easter
+    football-finals (football-finals
+    picnic (picnic
+    pub food (has collection)
+
+
+    ===type===
+    free range (free-range
+    gluten free (has collection)
+    vegan (vegan, plant-based)
+    vegetarian (vegetarian, plant-based)
+
+    ===Cuisine===
+    Australian (fairy-bread, lamingtons
+    Chinese (chinese, chow-mein, chicken-stir-fry
+    German (schnitzel
+    Indian (indian, curries)
+    Indonesian (indonesian
+    Italian (parmigiana, lasagne, carbonara
+    Middle Eastern (has collection)
+    Mexican
+    Moroccan (moroccan
+    Philadelphia (has collection)
+    South American (has collection)
+    Spanish (chorizo
+    Vietnamese
+    '''
+    # > return this to kai to hardocde
+
+    # hardcode map our categories to INCLUDE db's categories
+    # e.g. dinner = find_all("dinner") ---> should return Friday Night dinner, dinner day, etc
+
+    # write search functionality- find all where cuisine = ???
+    # looks at both collection names and recipe title --> need to return distinct recipes IDs to prevent duplicates
+
+    abort(400, 'Cuisines API not fully implemented yet')
 
 # Returns recipes that contains searched ingredients
 # Takes in JSON request where key1=array of ingredients
@@ -248,11 +311,114 @@ def get_recipes():
             with open(resdir + fname, "a") as f:
                 f.write(str(d).replace("'", "\"") + "\n")
 
-        return True
+    def get_taste():
+        id_count = -1
 
-    if '''get_openrecipes() or''' get_chowdown():
+        fname = "taste-recipes.json"
+        if isfile(resdir + fname):
+            return
+        for collection_page in range(1, 51):
+            soup = BeautifulSoup(get("https://www.taste.com.au/recipes/collections?page="+str(collection_page)+"&sort=recent").text, "html.parser")
+            #for each page containing recipe folders
+            for url in soup.find_all('article'):
+                collection_link_path = url.figure.a["href"]
+
+                #opens each recipe collection eg https://www.taste.com.au/recipes/collections/indian-curry-recipes
+                a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path).text, "html.parser")
+                #traverse each page in collection
+                if a_collection_page.find('div', class_="col-xs-8 pages"):
+                    num_section = a_collection_page.find('div', class_="col-xs-8 pages")
+                    for link in num_section.find_all('a'):
+                        num_pages = link.text
+                    # For every page in A collection eg pages 1-8 in Indian Recipe Collection
+                    for i in range(1, int(num_pages)+1):
+                        print("NEXT page: " + "https://www.taste.com.au" + collection_link_path+ "?page="+str(i)+"&q=&sort=recent")
+                        a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path+ "?page="+str(i)+"&q=&sort=recent").text, "html.parser")
+                        id_count = get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_count, first_run_flag)
+
+                else: #there is only 1 page in collection
+                    a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path).text,"html.parser")
+                    id_count = get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_count, first_run_flag)
+
+    if get_openrecipes() or get_chowdown() or get_taste():
         return
-        insert_db_recipes()
+
+def get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_count, first_run_flag):
+    import re
+    from datetime import datetime
+    from time import time
+
+    recipe_section = a_collection_page.find(['main'])
+    # repeat go into each recipe fpr X pages in collectoin eg in Indian food collection get each recipe
+    for i, recipe in enumerate(recipe_section.find_all(['li'], class_="col-xs-6")):
+        recipe_link_path = recipe.figure.a["href"]
+        recipe_link = BeautifulSoup(get("https://www.taste.com.au" + recipe_link_path).text, "html.parser")
+        d = {"||url||": "||"+"https://www.taste.com.au" + recipe_link_path+"||"}
+        print(recipe_link_path)
+
+        # open each recipe and get details
+        d["||source||"] = "||"+"taste"+"||"
+        d["||ts||"] = {"||date||": round(time())}
+        d["||datePublished||"] = "||"+str(datetime.now().strftime("%Y-%m-%d"))+"||"
+        d["||collectionName||"] = "||"+collection_link_path+"||"
+        #name
+        name = recipe_link.find(['div'], class_="col-xs-12").h1.text
+        id_count = id_count + 1
+        d["||name||"] = "||"+name+"||".replace("'", "").replace("\"", "")
+
+        for recipe in recipe_link.find_all(['main'], class_="col-xs-12"):
+            # ingredient
+            for ingredient in recipe.find_all('div', class_="ingredient-description"):
+                ing = ingredient.text
+                d.setdefault("||ingredients||", []).append("||"+ing+"||".replace("\"", ""))
+
+            # method
+            for m in recipe.find_all('div', class_="recipe-method-step-content"):
+                method = m.text
+                method = re.sub('\n', '', method)
+                method = re.sub(' +', ' ', method).lstrip().rstrip()
+                d.setdefault("||method||", []).append("||"+method+"||".replace("\"", ""))
+
+            # recipe info (cooktime, preptime, servings)
+            for recipe_info_section in recipe.find_all('div', class_="cooking-info-lead-image-container col-xs-12 col-sm-8"):
+                for info in recipe_info_section.find_all('li'):
+                    info = info.text
+                    if "Cook" in info:
+                        cook = re.sub("[a-zA-Z]", "", info).strip()
+                        d["||cookTime||"] = "||"+cook+"||"
+                    elif "Prep" in info:
+                        d["||prepTime||"] = "||"+re.sub("[a-zA-Z]", "", info).strip()+"||"
+                    elif "Makes" in info:
+                        d["||recipeYield||"] = "||"+info.strip()+"||"
+                    elif "Servings" in info:
+                        d["||recipeYield||"] = "||"+info.strip()+"||"
+
+            # image
+            image = recipe.img["src"]
+            d["||image||"] = "||"+image+"||"
+
+            d["||description||"] = "||"+recipe.find('div', class_="single-asset-description-block").p.text.replace("\"", "")+"||"
+
+            first_run_flag = False
+
+            # CREATING FILE
+            with open(resdir + fname, "a") as f:
+                f.write(str(d).replace("'||", "\"").replace("||'", "\"").replace("||", "").replace('\\xa0', '')+ "\n,")
+
+    return id_count
+
+# uploads recipe file to mongodb
+def insert_db_recipes():
+    db = connect_db()
+    from bson import json_util
+    with open("resources/taste-recipes.json", "r", encoding='utf-8') as file:
+        for row in file:
+            try:
+                data = json_util.loads(row)
+                db.recipes.insert(data)
+            except:
+                print(row)
+    return "finished inserting"
 
 def scrape_ingredients():
     # from nltk.corpus import wordnet
@@ -515,6 +681,8 @@ if __name__ == '__main__':
     get_ingredient_refence()
     get_recipes()
     ing_rcps, rcp_ings = scrape_ingredients()
+    insert_db_recipes()
+
     app.run()
     # app.run(port = "5001")
 
