@@ -82,76 +82,6 @@ def get_collection_fields():
     return jsonify(json_docs)
 
 # Returns recipes that contains searched ingredients
-# Takes in JSON request where key1=array of ingredients (comma separated)
-@app.route("/categories", methods = ["Get"])
-def search_db_categories():
-    db = connect_db()
-
-    # write mongodb query to find all categories
-    categories = db.final_taste_recipes.distinct('collectionName');
-    for c in categories:
-        print(c)
-    # res = db.recipes.find({"collectionName": "dinner"});
-
-    # > hardcode list of generic categories e.g. dinner
-    '''
-    === Seasons ===
-    winter (winter
-    summer (summer
-    autumn (autumn
-
-    === Meals ===
-    soup  (soup
-    snack (biscuit, finger-food, nachos, quick-treats
-    lunch (lunch, salad, high-tea, sandwich, pikelet)
-    dinner (dinner, mains, pasta, snapper, slow-cooker-beef)
-    dessert (dessert, fruit, ice-cream, cake, mandarin, tiramisu, maple-syrup, salted-caramel, cheesecake, chocolate,
-            fudge, doughnut, marshmallow, tim-tam, crepe)
-    drinks (drinks, smoothies, pimms
-
-
-    ===event===
-    barbecue (barbecue
-    birthday (birthday
-    christmas (has collection)
-    easter (easter
-    football-finals (football-finals
-    picnic (picnic
-    pub food (has collection)
-
-
-    ===type===
-    free range (free-range
-    gluten free (has collection)
-    vegan (vegan, plant-based)
-    vegetarian (vegetarian, plant-based)
-
-    ===Cuisine===
-    Australian (fairy-bread, lamingtons
-    Chinese (chinese, chow-mein, chicken-stir-fry
-    German (schnitzel
-    Indian (indian, curries)
-    Indonesian (indonesian
-    Italian (parmigiana, lasagne, carbonara
-    Middle Eastern (has collection)
-    Mexican
-    Moroccan (moroccan
-    Philadelphia (has collection)
-    South American (has collection)
-    Spanish (chorizo
-    Vietnamese
-    '''
-    # > return this to kai to hardocde
-
-    # hardcode map our categories to INCLUDE db's categories
-    # e.g. dinner = find_all("dinner") ---> should return Friday Night dinner, dinner day, etc
-
-    # write search functionality- find all where cuisine = ???
-    # looks at both collection names and recipe title --> need to return distinct recipes IDs to prevent duplicates
-
-    abort(400, 'Cuisines API not fully implemented yet')
-
-# Returns recipes that contains searched ingredients
 # Takes in JSON request where key1=array of ingredients
 # Inserts all scraped recipes into database
 def insert_db_recipes():
@@ -546,6 +476,40 @@ def get_db_recipe(recipe_ids = "", size = 80):
 
         return dumps({"result" : recipes, "size" : len(recipes)}), 200
 
+# GET    - Returns recipes that are within searched category
+# e.g. http://127.0.0.1:5000/categories?category=christmas&page_size=80&page_number=2
+@app.route("/categories", methods=["GET"])
+def handle_categories():
+    startRange = 0
+    page_size = 80
+    if "page_size" in request.args:
+        try:
+            page_size = int(request.args.get("page_size"))
+        except ValueError:
+            page_size = 80
+    if "page_size" in request.args:
+        try:
+            startRange = int(request.args.get("page_number")) * page_size
+        except ValueError:
+            startRange = 0
+    if "category" not in request.args:
+        return dumps({"result" : "missing category parameter"}), 400
+    else:
+        cat = request.args.get("category")
+        cat = cat.strip().lower()
+
+    db = connect_db()
+    recipes = []
+    regx = re.compile(cat, re.IGNORECASE)
+    print(page_size)
+    res = db.recipes.find({"collectionName": regx}).skip(startRange).limit(page_size)
+
+    for doc in res:
+        recipes.append(doc)
+    array_sanitized = loads(json_util.dumps(recipes))
+
+    return dumps({"result" : array_sanitized, "size" : len(recipes)}), 200
+
 # POST    - creates new user
 # PUT     - updates user details.
 # DELETE  - deletes user
@@ -554,17 +518,17 @@ def handle_users():
     sc = 1
     db = connect_db()
     if request.method == 'POST':
-        email = request.get_json()["email"]
-        password = request.get_json()["password"]
+        email = request.get_json()['email']
+        password = request.get_json()['password']
         fName = request.get_json()['first_name']
         lName = request.get_json()['last_name']
         sc = db.users.insert({"email": email, "password": password, "first_name": fName, "last_name": lName})
     else:
         #Following methods require user to be logged in
-        if not "email" in session:
-            return dumps({"success": False, "error": "You need to be logged in first."}), 401,\
-                         {"ContentType": 'application/json'}
-        currEmail = session["email"]
+        if not 'email' in session:
+            return dumps({'success': False, 'error': "You need to be logged in first."}), 401,\
+                         {'ContentType': 'application/json'}
+        currEmail = session['email']
 
         if request.method == "DELETE":
             sc = db.users.delete_one({"email": currEmail})
@@ -572,8 +536,8 @@ def handle_users():
             abort(400, 'No valid JSON not provided')
         elif request.method == "PUT":
             print(3)
-            email = request.get_json()["email"]
-            password = request.get_json()["password"]
+            email = request.get_json()['email']
+            password = request.get_json()['password']
             fName = request.get_json()['fname']
             lName = request.get_json()['lname']
 
@@ -590,68 +554,57 @@ def handle_users():
             '''
             query is in format of:
              {
-                "email":email,
-                "password": password,
+                'email':email,
+                'password': password,
                 'first_name': fName,
                 'last_name': lName
             }
             '''
             sc = db.users.update(
-                {"email": currEmail},
+                {'email': currEmail},
                 query
             )
     if sc:
-        return dumps({"success": True}), 200, {"ContentType": 'application/json'}
+        return dumps({'success': True}), 200, {'ContentType': 'application/json'}
     else:
-        return dumps({"success": False}), 401, {"ContentType": 'application/json'}
+        return dumps({'success': False}), 401, {'ContentType': 'application/json'}
 
 # GET     - returns all favourited recipes for this user
 # POST    - creates new favourite for a logged in user
-# DELETE  - deletes favourite
+# DELETE  - deletes specified favourite
 @app.route("/favourites", methods = ["GET", "POST"])
-def handle_favourites():
+@app.route("/favourites/<recipe_id>", methods = ["DELETE"])
+def handle_favourites(recipe_id = ""):
     # check if user is logged in first
-    if not "email" in session:
-        return dumps({"success": False, "error": "You need to be logged in first."}), 401,\
-                     {"ContentType": 'application/json'}
-    currEmail = session["email"]
+    if not 'email' in session:
+        return dumps({'success': False, 'error': "You need to be logged in first."}), 401,\
+                     {'ContentType': 'application/json'}
+    currEmail = session['email']
     db = connect_db()
-    if request.method == "GET":
+    if request.method == 'GET':
         cursor = db.favourites.find({"email": currEmail})
         json_docs = []
 
         for doc in cursor:
-            print(doc["recipe_id"])
-            json_docs.append(doc["recipe_id"])
-        return jsonify(json_docs) #TODO return recipe details, not just recipe IDs
+            recipe = get_db_recipe(doc["recipe_id"])
+            # json_docs.append(doc)
+            json_docs.append(recipe) #recipe["result"])
+        #return jsonify(json_docs)
+        #loads(json_util.dumps(recipe_array))
+        # array_sanitized = loads(json_util.dumps(json_docs))
+        return dumps({"result" : json_docs, "size" : len(json_docs)}), 200, {'ContentType': 'application/json'}
     elif request.json is None:
         abort(400, 'No valid JSON not provided')
     elif request.method == 'POST':
         recipe_id = request.get_json()['recipe_id']
         sc = db.favourites.insert({"email": currEmail, "recipe_id": recipe_id})
-
-    if sc:
-        return dumps({"success": True}), 200, {"ContentType": 'application/json'}
-    else:
-        return dumps({"success": False}), 401, {"ContentType": 'application/json'}
-
-# DELETE  - deletes specified favourite
-@app.route("/favourites/<recipe_id>", methods = ["DELETE"])
-def handle_favourite(recipe_id):
-    # check if user is logged in first
-    if not "email" in session:
-        return dumps({"success": False, "error": "You need to be logged in first."}), 401,\
-                     {"ContentType": 'application/json'}
-    currEmail = session["email"]
-    db = connect_db()
-    sc = 1
     if request.method == "DELETE":
         sc = db.favourites.delete_many({"email": currEmail, "recipe_id":recipe_id})
 
     if sc:
-        return dumps({"success": True}), 200, {"ContentType": 'application/json'}
+        return dumps({'success': True}), 200, {'ContentType': 'application/json'}
     else:
-        return dumps({"success": False}), 401, {"ContentType": 'application/json'}
+        return dumps({'success': False}), 401, {'ContentType': 'application/json'}
 
 if __name__ == '__main__':
     if not exists(resdir):
