@@ -503,6 +503,7 @@ def get_ingredients():
 @app.route("/recipes/<recipe_ids>", methods = ["GET"])
 def get_db_recipe(recipe_ids = "", size = 80):
     db = connect_db()
+
     # if request.url_rule.rule == '/recipes':
     #     res = db.recipes.find()
     #     recipe_array = []
@@ -521,34 +522,17 @@ def get_db_recipe(recipe_ids = "", size = 80):
             pass
 
     if recipe_ids:
-        # from bson.objectid import ObjectId
+        from bson.objectid import ObjectId
 
-        # res = db.recipes.find_one({"_id": ObjectId(recipe_ids)})
-        # json_res = []
-        # for doc in res:
-        #     # print(doc)
-        #     json_row = dumps(res[doc], default = json_util.default)
-        #     # json_row = {doc:res[doc]}
-        #     json_res.append(json_row)
-        #
-        # return jsonify(json_res), 200
+        recipe_ids, db, recipe_objs = recipe_ids.strip().split(","), connect_db(), []
+        cursor = db.recipes.find({"_id" : {"$in" : [ObjectId(ri) for ri in recipe_ids]}})
+        for line in cursor:
+            line["_id"] = str(line.pop("_id"))
+            recipe_objs.append(line)
+            if len(recipe_objs) == size:
+                break
 
-        recipe_ids = sorted(recipe_ids.strip().lower().split(","))
-        lines, recipes = [], []
-        for fname in listdir(resdir):
-            if not isfile(resdir + fname) or not fname.endswith(".json"):
-                continue
-            with open(resdir + fname, encoding = 'utf-8') as f:
-                lines = lines + f.readlines()
-        for i, line in enumerate(lines):
-            # print(i)
-            line = loads(line)
-            if line["_id"]["$oid"] in recipe_ids:
-                recipes.append(line)
-                if len(recipes) == size:
-                    break
-
-        return dumps({"result" : recipes, "size" : len(recipes)}), 200
+        return dumps({"result" : recipe_objs, "size" : len(recipe_objs)}), 200
     else:
         tmp = set()
         for i, ing in enumerate(l_ing.strip().lower().split(",")):
@@ -672,6 +656,7 @@ def handle_favourite(recipe_id):
 if __name__ == '__main__':
     if not exists(resdir):
         makedirs(resdir)
+
     get_ingredient_refence()
     get_recipes()
 
@@ -687,5 +672,3 @@ if __name__ == '__main__':
 
     app.run()
     # app.run(port = "5001")
-
-#1313
