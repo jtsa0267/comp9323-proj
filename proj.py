@@ -515,10 +515,10 @@ def handle_users():
     db = connect_db()
     if request.method == "POST":
         try:
-	        email = request.get_json()["email"]
-	        password = request.get_json()["password"]
-	        fName = request.get_json()["first_name"]
-	        lName = request.get_json()["last_name"]
+            email = request.get_json()["email"]
+            password = request.get_json()["password"]
+            fName = request.get_json()["first_name"]
+            lName = request.get_json()["last_name"]
             # check email is unique
             print(db.users.find({'email': email}).count())
             if db.users.find({'email': email}).count() != 0:
@@ -540,8 +540,8 @@ def handle_users():
             return dumps({"error": "No valid JSON not provided"}), 400, {"ContentType": "application/json"}
         elif request.method == "PUT":
             try:
-	            email = request.get_json()["email"]
-	            password = request.get_json()["password"]
+                email = request.get_json()["email"]
+                password = request.get_json()["password"]
                 fName = request.get_json()["first_name"]
                 lName = request.get_json()["last_name"]
             except:
