@@ -20,12 +20,18 @@ def greet():
         return 'Logged in as %s' % escape(session["email"])
     return 'Hi, you are not logged in'
 
-# Signs user in and redirects to homepage
+# Signs user in and redirects to homepage.
+# Also allows toggling between keeping user signed in or not
 @app.route("/login", methods = ["POST"])
 def login():
     if request.method == "POST":
         email = request.get_json()["email"]
         password = request.get_json()["password"]
+        keepSignedIn = request.get_json()["keep_signed_in"]
+        if keepSignedIn:
+            session.permanent = True
+        else:
+            session.permanent = False
         db = connect_db()
         res = db.users.find_one({"email": email})
         if res and password == res["password"]:
