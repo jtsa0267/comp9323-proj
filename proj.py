@@ -16,7 +16,6 @@ rcp_ings = {} # recipes and how many ingredients each recipe has
 
 @app.route("/", methods = ["GET"])
 def greet():
-    # db.recipes.remove({"collectionName": "/recipes/collections/family-dinner-recipes"} )
     if "email" in session:
         return 'Logged in as %s' % escape(session["email"])
     return 'Hi, you are not logged in'
@@ -31,15 +30,15 @@ def login():
         res = db.users.find_one({"email": email})
         if res and password == res["password"]:
             session["email"] = email
-            return dumps({"success": True}), 200, {"ContentType": 'application/json'}
-    return dumps({"error": 'Wrong credentials'}), 200, {"ContentType": 'application/json'}
+            return dumps({"success": True}), 200, {"ContentType": "application/json"}
+    return dumps({"error": 'Wrong credentials'}), 200, {"ContentType": "application/json"}
 
 # Logs user out and redirects to homepage
 @app.route("/logout")
 def logout():
     # remove the email from the session if it's there
     session.pop("email", None)
-    return dumps({"success": True}), 200, {"ContentType": 'application/json'}
+    return dumps({"success": True}), 200, {"ContentType": "application/json"}
 
 # Connects to mLab's MongoDB and returns connection
 def connect_db():
@@ -248,7 +247,7 @@ def get_recipes():
 
     def get_taste():
         def get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_count, first_run_flag):
-            recipe_section = a_collection_page.find(['main'])
+            recipe_section = a_collection_page.find(["main"])
             # repeat go into each recipe for X pages in collectoin e.g. in Indian food collection get each recipe
             for i, recipe in enumerate(recipe_section.find_all(['li'], class_ = "col-xs-6")):
                 recipe_link_path = recipe.figure.a["href"]
@@ -262,25 +261,25 @@ def get_recipes():
                 d["||datePublished||"] = "||" + str(datetime.now().strftime("%Y-%m-%d")) + "||"
                 d["||collectionName||"] = "||" + collection_link_path + "||"
                 #name
-                name = recipe_link.find(['div'], class_ = "col-xs-12").h1.text
+                name = recipe_link.find(["div"], class_ = "col-xs-12").h1.text
                 id_count = id_count + 1
                 d["||name||"] = "||" + name + "||".replace("'", "").replace("\"", "")
 
-                for recipe in recipe_link.find_all(['main'], class_ = "col-xs-12"):
+                for recipe in recipe_link.find_all(["main"], class_ = "col-xs-12"):
                     # ingredient
-                    for ingredient in recipe.find_all('div', class_ = "ingredient-description"):
+                    for ingredient in recipe.find_all("div", class_ = "ingredient-description"):
                         ing = ingredient.text
                         d.setdefault("||ingredients||", []).append("||" + ing + "||".replace("\"", ""))
 
                     # method
-                    for m in recipe.find_all('div', class_ = "recipe-method-step-content"):
+                    for m in recipe.find_all("div", class_ = "recipe-method-step-content"):
                         method = m.text
                         method = re.sub('\n', '', method)
                         method = re.sub(' +', ' ', method).lstrip().rstrip()
                         d.setdefault("||method||", []).append("||" + method + "||".replace("\"", ""))
 
                     # recipe info (cooktime, preptime, servings)
-                    for recipe_info_section in recipe.find_all('div', class_ = "cooking-info-lead-image-container col-xs-12 col-sm-8"):
+                    for recipe_info_section in recipe.find_all("div", class_ = "cooking-info-lead-image-container col-xs-12 col-sm-8"):
                         for info in recipe_info_section.find_all('li'):
                             info = info.text
                             if "Cook" in info:
@@ -297,7 +296,7 @@ def get_recipes():
                     image = recipe.img["src"]
                     d["||image||"] = "||" + image + "||"
 
-                    d["||description||"] = "||" + recipe.find('div', class_ = "single-asset-description-block").p.text.replace("\"", "") + "||"
+                    d["||description||"] = "||" + recipe.find("div", class_ = "single-asset-description-block").p.text.replace("\"", "") + "||"
 
                     # CREATING FILE
                     with open(resdir + fname, "a") as f:
@@ -321,8 +320,8 @@ def get_recipes():
                 #opens each recipe collection eg https://www.taste.com.au/recipes/collections/indian-curry-recipes
                 a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path).text, "html.parser")
                 #traverse each page in collection
-                if a_collection_page.find('div', class_ = "col-xs-8 pages"):
-                    num_section = a_collection_page.find('div', class_ = "col-xs-8 pages")
+                if a_collection_page.find("div", class_ = "col-xs-8 pages"):
+                    num_section = a_collection_page.find("div", class_ = "col-xs-8 pages")
                     for link in num_section.find_all('a'):
                         num_pages = link.text
                     # For every page in A collection eg pages 1-8 in Indian Recipe Collection
@@ -432,9 +431,7 @@ def get_ingredients():
 #           http://127.0.0.1:5000/recipes/5160756d96cc62079cc2db16,chowdown0
 @app.route("/recipes", methods = ["GET"])
 @app.route("/recipes/<recipe_ids>", methods = ["GET"])
-def get_db_recipe(recipe_ids = "", size = 80):
-    db = connect_db()
-
+def get_db_recipe(recipe_ids = "", page_size = 80):
     # if request.url_rule.rule == "/recipes":
     #     res = db.recipes.find()
     #     recipe_array = []
@@ -446,9 +443,9 @@ def get_db_recipe(recipe_ids = "", size = 80):
         if "ingredients" not in request.args:
             return dumps({"result" : "missing ingredients parameter"}), 400
         l_ing = request.args.get("ingredients")
-    if "size" in request.args:
+    if "page_size" in request.args:
         try:
-            size = int(request.args.get("size"))
+            page_size = int(request.args.get("page_size"))
         except ValueError:
             pass
 
@@ -456,12 +453,10 @@ def get_db_recipe(recipe_ids = "", size = 80):
         from bson.objectid import ObjectId
 
         recipe_ids, db, recipes = recipe_ids.strip().split(","), connect_db(), []
-        cursor = db.recipes.find({"_id" : {"$in" : [ObjectId(ri) for ri in recipe_ids]}})
-        for line in cursor:
-            line["_id"] = str(line.pop("_id"))
-            recipes.append(line)
-            if len(recipes) == size:
-                break
+        cursor = db.recipes.find({"_id" : {"$in" : [ObjectId(ri) for ri in recipe_ids]}}).limit(page_size)
+        for c in cursor:
+            c["_id"] = str(c.pop("_id"))
+            recipes.append(c)
 
         return dumps({"result" : recipes, "size" : len(recipes)}), 200
     else:
@@ -473,13 +468,13 @@ def get_db_recipe(recipe_ids = "", size = 80):
             else:
                 tmp = tmp.intersection(ing_rcps[ing])
         tmp = [t for c, t in sorted([(rcp_ings[t], t) for t in tmp], key = lambda tup: tup[0])]
-        recipes = loads(get_db_recipe(",".join(tmp), size)[0])["result"]
+        recipes = loads(get_db_recipe(",".join(tmp), page_size)[0])["result"]
 
         return dumps({"result" : recipes, "size" : len(recipes)}), 200
 
 # GET    - Returns recipes that are within searched category
 # e.g. http://127.0.0.1:5000/categories?category=christmas&page_size=80&page_number=2
-@app.route("/categories", methods=["GET"])
+@app.route("/categories", methods = ["GET"])
 def handle_categories():
     startRange = 0
     page_size = 80
@@ -518,39 +513,39 @@ def handle_categories():
 def handle_users():
     sc = 1
     db = connect_db()
-    if request.method == 'POST':
+    if request.method == "POST":
         try:
-            fName = request.get_json()['first_name']
-            lName = request.get_json()['last_name']
-            email = request.get_json()['email']
-            password = request.get_json()['password']
+	        email = request.get_json()["email"]
+	        password = request.get_json()["password"]
+	        fName = request.get_json()["first_name"]
+	        lName = request.get_json()["last_name"]
             # check email is unique
             print(db.users.find({'email': email}).count())
             if db.users.find({'email': email}).count() != 0:
-                return dumps({"error": "Already signed up with this email."}), 401, {'ContentType': 'application/json'}
+                return dumps({"error": "Already signed up with this email."}), 401, {"ContentType": "application/json"}
         except:
-            return dumps({'error': "Need: email, password, first_name, last_name"}), 401, {'ContentType': 'application/json'}
+            return dumps({"error": "Need: email, password, first_name, last_name"}), 401, {"ContentType": "application/json"}
         sc = db.users.insert({"email": email, "password": password, "first_name": fName, "last_name": lName})
     else:
-        #Following methods require user to be logged in
-        if not 'email' in session:
-            return dumps({'error': "You need to be logged in first."}), 401, {'ContentType': 'application/json'}
-        currEmail = session['email']
+        # Following methods require user to be logged in
+        if not "email" in session:
+            return dumps({"error": "You need to be logged in first."}), 401, {"ContentType": "application/json"}
+        currEmail = session["email"]
 
         if request.method == "DELETE":
             sc = db.users.remove({"email": currEmail})
             sc = db.favourites.remove({"email": currEmail})
             logout()
         elif request.json is None:
-            return dumps({'error': "No valid JSON not provided"}), 400, {'ContentType': 'application/json'}
+            return dumps({"error": "No valid JSON not provided"}), 400, {"ContentType": "application/json"}
         elif request.method == "PUT":
             try:
-                email = request.get_json()['email']
-                password = request.get_json()['password']
-                fName = request.get_json()['first_name']
-                lName = request.get_json()['last_name']
+	            email = request.get_json()["email"]
+	            password = request.get_json()["password"]
+                fName = request.get_json()["first_name"]
+                lName = request.get_json()["last_name"]
             except:
-                return dumps({'error': "Need: email, password, first_name, last_name"}), 401, {'ContentType': 'application/json'}
+                return dumps({"error": "Need: email, password, first_name, last_name"}), 401, {"ContentType": "application/json"}
 
             query = {}
             if email:
@@ -565,20 +560,20 @@ def handle_users():
             '''
             query is in format of:
              {
-                'email':email,
-                'password': password,
-                'first_name': fName,
-                'last_name': lName
+                "email":email,
+                "password": password,
+                "first_name": fName,
+                "last_name": lName
             }
             '''
             sc = db.users.update(
-                {'email': currEmail},
+                {"email": currEmail},
                 query
             )
     if sc:
-        return dumps({'success': True}), 200, {'ContentType': 'application/json'}
+        return dumps({"success": True}), 200, {"ContentType": "application/json"}
     else:
-        return dumps({'errored': "Database operation failed. Check console"}), 401, {'ContentType': 'application/json'}
+        return dumps({"errored": "Database operation failed. Check console"}), 401, {"ContentType": "application/json"}
 
 # GET     - returns all favourited recipes for this user
 # POST    - creates new favourite for a logged in user
@@ -588,10 +583,10 @@ def handle_users():
 def handle_favourites(recipe_id = ""):
     # check if user is logged in first
     if not 'email' in session:
-        return dumps({'error': "You need to be logged in first."}), 401, {'ContentType': 'application/json'}
-    currEmail = session['email']
+        return dumps({"error": "You need to be logged in first."}), 401, {"ContentType": "application/json"}
+    currEmail = session["email"]
     db = connect_db()
-    if request.method == 'GET':
+    if request.method == "GET":
         cursor = db.favourites.find({"email": currEmail})
         json_docs = []
 
@@ -602,19 +597,19 @@ def handle_favourites(recipe_id = ""):
         #return jsonify(json_docs)
         #loads(json_util.dumps(recipe_array))
         # array_sanitized = loads(json_util.dumps(json_docs))
-        return dumps({"result" : json_docs, "size" : len(json_docs)}), 200, {'ContentType': 'application/json'}
+        return dumps({"result" : json_docs, "size" : len(json_docs)}), 200, {"ContentType": "application/json"}
     elif request.json is None:
         abort(400, 'No valid JSON not provided')
-    elif request.method == 'POST':
+    elif request.method == "POST":
         recipe_id = request.get_json()['recipe_id']
         sc = db.favourites.insert({"email": currEmail, "recipe_id": recipe_id})
     if request.method == "DELETE":
         sc = db.favourites.delete_many({"email": currEmail, "recipe_id":recipe_id})
 
     if sc:
-        return dumps({'success': True}), 200, {'ContentType': 'application/json'}
+        return dumps({"success": True}), 200, {"ContentType": "application/json"}
     else:
-        return dumps({'errored': "Database operation failed. Check console"}), 401, {'ContentType': 'application/json'}
+        return dumps({"errored": "Database operation failed. Check console"}), 401, {"ContentType": "application/json"}
 
 if __name__ == '__main__':
     if not exists(resdir):
