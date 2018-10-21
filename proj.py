@@ -16,6 +16,7 @@ rcp_ings = {} # recipes and how many ingredients each recipe has
 
 @app.route("/", methods = ["GET"])
 def greet():
+    # db.recipes.remove({"collectionName": "/recipes/collections/family-dinner-recipes"} )
     if "email" in session:
         return 'Logged in as %s' % escape(session["email"])
     return 'Hi, you are not logged in'
@@ -31,7 +32,7 @@ def login():
         if res and password == res["password"]:
             session["email"] = email
             return dumps({"success": True}), 200, {"ContentType": 'application/json'}
-    return dumps({"success": False, "error": 'Wrong credentials'}), 200, {"ContentType": 'application/json'}
+    return dumps({"error": 'Wrong credentials'}), 200, {"ContentType": 'application/json'}
 
 # Logs user out and redirects to homepage
 @app.route("/logout")
@@ -98,7 +99,7 @@ def insert_db_recipes():
                     recipe_obj = json_util.loads(line)
                     db.recipes.insert(recipe_obj)
                 except:
-                    print(row)
+                    pass
 
 def get_ingredient_refence():
     from textblob.inflect import singularize
@@ -518,28 +519,38 @@ def handle_users():
     sc = 1
     db = connect_db()
     if request.method == 'POST':
-        email = request.get_json()['email']
-        password = request.get_json()['password']
-        fName = request.get_json()['first_name']
-        lName = request.get_json()['last_name']
+        try:
+            fName = request.get_json()['first_name']
+            lName = request.get_json()['last_name']
+            email = request.get_json()['email']
+            password = request.get_json()['password']
+            # check email is unique
+            print(db.users.find({'email': email}).count())
+            if db.users.find({'email': email}).count() != 0:
+                return dumps({"error": "Already signed up with this email."}), 401, {'ContentType': 'application/json'}
+        except:
+            return dumps({'error': "Need: email, password, first_name, last_name"}), 401, {'ContentType': 'application/json'}
         sc = db.users.insert({"email": email, "password": password, "first_name": fName, "last_name": lName})
     else:
         #Following methods require user to be logged in
         if not 'email' in session:
-            return dumps({'success': False, 'error': "You need to be logged in first."}), 401,\
-                         {'ContentType': 'application/json'}
+            return dumps({'error': "You need to be logged in first."}), 401, {'ContentType': 'application/json'}
         currEmail = session['email']
 
         if request.method == "DELETE":
-            sc = db.users.delete_one({"email": currEmail})
+            sc = db.users.remove({"email": currEmail})
+            sc = db.favourites.remove({"email": currEmail})
+            logout()
         elif request.json is None:
-            abort(400, 'No valid JSON not provided')
+            return dumps({'error': "No valid JSON not provided"}), 400, {'ContentType': 'application/json'}
         elif request.method == "PUT":
-            print(3)
-            email = request.get_json()['email']
-            password = request.get_json()['password']
-            fName = request.get_json()['fname']
-            lName = request.get_json()['lname']
+            try:
+                email = request.get_json()['email']
+                password = request.get_json()['password']
+                fName = request.get_json()['first_name']
+                lName = request.get_json()['last_name']
+            except:
+                return dumps({'error': "Need: email, password, first_name, last_name"}), 401, {'ContentType': 'application/json'}
 
             query = {}
             if email:
@@ -567,7 +578,7 @@ def handle_users():
     if sc:
         return dumps({'success': True}), 200, {'ContentType': 'application/json'}
     else:
-        return dumps({'success': False}), 401, {'ContentType': 'application/json'}
+        return dumps({'errored': "Database operation failed. Check console"}), 401, {'ContentType': 'application/json'}
 
 # GET     - returns all favourited recipes for this user
 # POST    - creates new favourite for a logged in user
@@ -577,8 +588,7 @@ def handle_users():
 def handle_favourites(recipe_id = ""):
     # check if user is logged in first
     if not 'email' in session:
-        return dumps({'success': False, 'error': "You need to be logged in first."}), 401,\
-                     {'ContentType': 'application/json'}
+        return dumps({'error': "You need to be logged in first."}), 401, {'ContentType': 'application/json'}
     currEmail = session['email']
     db = connect_db()
     if request.method == 'GET':
@@ -604,7 +614,7 @@ def handle_favourites(recipe_id = ""):
     if sc:
         return dumps({'success': True}), 200, {'ContentType': 'application/json'}
     else:
-        return dumps({'success': False}), 401, {'ContentType': 'application/json'}
+        return dumps({'errored': "Database operation failed. Check console"}), 401, {'ContentType': 'application/json'}
 
 if __name__ == '__main__':
     if not exists(resdir):
