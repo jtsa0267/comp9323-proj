@@ -250,7 +250,7 @@ def get_recipes():
 
         return True
 
-    if get_openrecipes() or get_chowdown():
+    if '''get_openrecipes() or''' get_chowdown():
         return
         insert_db_recipes()
 
