@@ -95,8 +95,7 @@ def insert_db_recipes():
         with open(resdir + fname, encoding = 'utf-8') as f:
             for line in f.readlines():
                 try:
-                    recipe_obj = json_util.loads(line)
-                    db.recipes.insert(recipe_obj)
+                    db.recipes.insert(json_util.loads(line))
                 except:
                     print(row)
 
@@ -375,11 +374,11 @@ def scrape_ingredients():
 
     db = connect_db()
     cursor = db.recipes.find({})
-    for k, line in enumerate(cursor):
+    for k, doc in enumerate(cursor):
         print(k)
-        recipe_id = str(line["_id"])
+        recipe_id = str(doc["_id"])
         d_rcp[recipe_id] = 0
-        for ing_str in line["ingredients"]:
+        for ing_str in doc["ingredients"]:
             ing_str = re.findall(quantity_filter, ing_str)
             if not ing_str or len(ing_str) > 1:
                 continue
@@ -454,9 +453,9 @@ def get_db_recipe(recipe_ids = "", page_size = 80):
 
         recipe_ids, db, recipes = recipe_ids.strip().split(","), connect_db(), []
         cursor = db.recipes.find({"_id" : {"$in" : [ObjectId(ri) for ri in recipe_ids]}}).limit(page_size)
-        for c in cursor:
-            c["_id"] = str(c.pop("_id"))
-            recipes.append(c)
+        for doc in cursor:
+            doc["_id"] = str(doc.pop("_id"))
+            recipes.append(doc)
 
         return dumps({"result" : recipes, "size" : len(recipes)}), 200
     else:
