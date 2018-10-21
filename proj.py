@@ -16,29 +16,29 @@ rcp_ings = {} # recipes and how many ingredients each recipe has
 
 @app.route("/", methods = ["GET"])
 def greet():
-    if 'email' in session:
-        return 'Logged in as %s' % escape(session['email'])
+    if "email" in session:
+        return 'Logged in as %s' % escape(session["email"])
     return 'Hi, you are not logged in'
 
 # Signs user in and redirects to homepage
-@app.route('/login', methods = ["POST"])
+@app.route("/login", methods = ["POST"])
 def login():
     if request.method == "POST":
-        email = request.get_json()['email']
-        password = request.get_json()['password']
+        email = request.get_json()["email"]
+        password = request.get_json()["password"]
         db = connect_db()
         res = db.users.find_one({"email": email})
-        if res and password == res['password']:
-            session['email'] = email
-            return dumps({'success': True}), 200, {'ContentType': 'application/json'}
-    return dumps({'success': False, 'error': 'Wrong credentials'}), 200, {'ContentType': 'application/json'}
+        if res and password == res["password"]:
+            session["email"] = email
+            return dumps({"success": True}), 200, {"ContentType": 'application/json'}
+    return dumps({"success": False, "error": 'Wrong credentials'}), 200, {"ContentType": 'application/json'}
 
 # Logs user out and redirects to homepage
-@app.route('/logout')
+@app.route("/logout")
 def logout():
     # remove the email from the session if it's there
-    session.pop('email', None)
-    return dumps({'success': True}), 200, {'ContentType': 'application/json'}
+    session.pop("email", None)
+    return dumps({"success": True}), 200, {"ContentType": 'application/json'}
 
 # Connects to mLab's MongoDB and returns connection
 def connect_db():
@@ -83,7 +83,7 @@ def get_collection_fields():
 
 # Returns recipes that contains searched ingredients
 # Takes in JSON request where key1=array of ingredients (comma separated)
-@app.route("/categories", methods = ['Get'])
+@app.route("/categories", methods = ["Get"])
 def search_db_categories():
     db = connect_db()
 
@@ -499,19 +499,19 @@ def get_ingredients():
 # Usage eg: http://127.0.0.1:5000/recipes
 #           http://127.0.0.1:5000/recipes?ingredients=onion,carrot
 #           http://127.0.0.1:5000/recipes/5160756d96cc62079cc2db16,chowdown0
-@app.route("/recipes", methods = ['GET'])
+@app.route("/recipes", methods = ["GET"])
 @app.route("/recipes/<recipe_ids>", methods = ["GET"])
 def get_db_recipe(recipe_ids = "", size = 80):
     db = connect_db()
 
-    # if request.url_rule.rule == '/recipes':
+    # if request.url_rule.rule == "/recipes":
     #     res = db.recipes.find()
     #     recipe_array = []
     #     for doc in res:
     #         recipe_array.append(doc)
     #     array_sanitized = loads(json_util.dumps(recipe_array))
     #     return jsonify(array_sanitized)
-    if request.url_rule.rule == '/recipes':
+    if request.url_rule.rule == "/recipes":
         if "ingredients" not in request.args:
             return dumps({"result" : "missing ingredients parameter"}), 400
         l_ing = request.args.get("ingredients")
@@ -524,15 +524,15 @@ def get_db_recipe(recipe_ids = "", size = 80):
     if recipe_ids:
         from bson.objectid import ObjectId
 
-        recipe_ids, db, recipe_objs = recipe_ids.strip().split(","), connect_db(), []
+        recipe_ids, db, recipes = recipe_ids.strip().split(","), connect_db(), []
         cursor = db.recipes.find({"_id" : {"$in" : [ObjectId(ri) for ri in recipe_ids]}})
         for line in cursor:
             line["_id"] = str(line.pop("_id"))
-            recipe_objs.append(line)
-            if len(recipe_objs) == size:
+            recipes.append(line)
+            if len(recipes) == size:
                 break
 
-        return dumps({"result" : recipe_objs, "size" : len(recipe_objs)}), 200
+        return dumps({"result" : recipes, "size" : len(recipes)}), 200
     else:
         tmp = set()
         for i, ing in enumerate(l_ing.strip().lower().split(",")):
@@ -554,17 +554,17 @@ def handle_users():
     sc = 1
     db = connect_db()
     if request.method == 'POST':
-        email = request.get_json()['email']
-        password = request.get_json()['password']
+        email = request.get_json()["email"]
+        password = request.get_json()["password"]
         fName = request.get_json()['first_name']
         lName = request.get_json()['last_name']
         sc = db.users.insert({"email": email, "password": password, "first_name": fName, "last_name": lName})
     else:
         #Following methods require user to be logged in
-        if not 'email' in session:
-            return dumps({'success': False, 'error': "You need to be logged in first."}), 401,\
-                         {'ContentType': 'application/json'}
-        currEmail = session['email']
+        if not "email" in session:
+            return dumps({"success": False, "error": "You need to be logged in first."}), 401,\
+                         {"ContentType": 'application/json'}
+        currEmail = session["email"]
 
         if request.method == "DELETE":
             sc = db.users.delete_one({"email": currEmail})
@@ -572,8 +572,8 @@ def handle_users():
             abort(400, 'No valid JSON not provided')
         elif request.method == "PUT":
             print(3)
-            email = request.get_json()['email']
-            password = request.get_json()['password']
+            email = request.get_json()["email"]
+            password = request.get_json()["password"]
             fName = request.get_json()['fname']
             lName = request.get_json()['lname']
 
@@ -590,20 +590,20 @@ def handle_users():
             '''
             query is in format of:
              {
-                'email':email,
-                'password': password,
+                "email":email,
+                "password": password,
                 'first_name': fName,
                 'last_name': lName
             }
             '''
             sc = db.users.update(
-                {'email': currEmail},
+                {"email": currEmail},
                 query
             )
     if sc:
-        return dumps({'success': True}), 200, {'ContentType': 'application/json'}
+        return dumps({"success": True}), 200, {"ContentType": 'application/json'}
     else:
-        return dumps({'success': False}), 401, {'ContentType': 'application/json'}
+        return dumps({"success": False}), 401, {"ContentType": 'application/json'}
 
 # GET     - returns all favourited recipes for this user
 # POST    - creates new favourite for a logged in user
@@ -611,12 +611,12 @@ def handle_users():
 @app.route("/favourites", methods = ["GET", "POST"])
 def handle_favourites():
     # check if user is logged in first
-    if not 'email' in session:
-        return dumps({'success': False, 'error': "You need to be logged in first."}), 401,\
-                     {'ContentType': 'application/json'}
-    currEmail = session['email']
+    if not "email" in session:
+        return dumps({"success": False, "error": "You need to be logged in first."}), 401,\
+                     {"ContentType": 'application/json'}
+    currEmail = session["email"]
     db = connect_db()
-    if request.method == 'GET':
+    if request.method == "GET":
         cursor = db.favourites.find({"email": currEmail})
         json_docs = []
 
@@ -631,27 +631,27 @@ def handle_favourites():
         sc = db.favourites.insert({"email": currEmail, "recipe_id": recipe_id})
 
     if sc:
-        return dumps({'success': True}), 200, {'ContentType': 'application/json'}
+        return dumps({"success": True}), 200, {"ContentType": 'application/json'}
     else:
-        return dumps({'success': False}), 401, {'ContentType': 'application/json'}
+        return dumps({"success": False}), 401, {"ContentType": 'application/json'}
 
 # DELETE  - deletes specified favourite
 @app.route("/favourites/<recipe_id>", methods = ["DELETE"])
 def handle_favourite(recipe_id):
     # check if user is logged in first
-    if not 'email' in session:
-        return dumps({'success': False, 'error': "You need to be logged in first."}), 401,\
-                     {'ContentType': 'application/json'}
-    currEmail = session['email']
+    if not "email" in session:
+        return dumps({"success": False, "error": "You need to be logged in first."}), 401,\
+                     {"ContentType": 'application/json'}
+    currEmail = session["email"]
     db = connect_db()
     sc = 1
     if request.method == "DELETE":
         sc = db.favourites.delete_many({"email": currEmail, "recipe_id":recipe_id})
 
     if sc:
-        return dumps({'success': True}), 200, {'ContentType': 'application/json'}
+        return dumps({"success": True}), 200, {"ContentType": 'application/json'}
     else:
-        return dumps({'success': False}), 401, {'ContentType': 'application/json'}
+        return dumps({"success": False}), 401, {"ContentType": 'application/json'}
 
 if __name__ == '__main__':
     if not exists(resdir):
