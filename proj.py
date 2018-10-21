@@ -20,10 +20,6 @@ resdir = dirname(realpath(__file__)) + "/resources/"
 def greet():
     return "Hi!"
 
-@app.route("/something", methods=['Get'])
-def something():
-    return "soemthing"
-
 '''Connects to mLab's MongoDB and returns connection'''
 
 def connect_db():
@@ -37,23 +33,6 @@ def connect_db():
     db.authenticate(DB_USER, DB_PASS)
 
     return db
-
-def insert_db_recipes():
-    print("before db connect")
-    db = connect_db()
-    print("after db connect")
-    import json
-    from bson import json_util
-    import pymongo
-
-    ###note: removed '$' from oid and date variables
-    # TODO: change to load foreach file in folder
-    print("start")
-    from bson import json_util
-    data = json_util.loads(open("resources/taste-recipes-final.json", 'r').read())
-    db.tasteRecipes.insert(data)
-
-    print("finsih")
 
 def get_ingredient_refence():
     from re import match, sub
@@ -150,30 +129,22 @@ def get_recipes():
         id_count = -1
         first_run_flag = True
 
-        fname = "taste-recipes-final.json"
+        fname = "taste-recipes.json"
         if isfile(resdir + fname):
             return
         for collection_page in range(1, 51):
-            print("COLLECTION PAGE: " + str(collection_page))
             soup = BeautifulSoup(get("https://www.taste.com.au/recipes/collections?page="+str(collection_page)+"&sort=recent").text, "html.parser")
             #for each page containing recipe folders
-
             for url in soup.find_all('article'):
-                # print(url)
-                collection_link_path = url.figure.a["href"] #/recipes/collections/indian-curry-recipes
-                print(collection_link_path)
+                collection_link_path = url.figure.a["href"]
 
                 #opens each recipe collection eg https://www.taste.com.au/recipes/collections/indian-curry-recipes
                 a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path).text, "html.parser")
                 #traverse each page in collection
                 if a_collection_page.find('div', class_="col-xs-8 pages"):
-                    # num_pages = list(a_collection_page.find('div', class_="col-xs-8 pages").text)[-1]
-
                     num_section = a_collection_page.find('div', class_="col-xs-8 pages")
                     for link in num_section.find_all('a'):
                         num_pages = link.text
-                    # print("num_pages " + num_pages)
-
                     # For every page in A collection eg pages 1-8 in Indian Recipe Collection
                     for i in range(1, int(num_pages)+1):
                         print("NEXT page: " + "https://www.taste.com.au" + collection_link_path+ "?page="+str(i)+"&q=&sort=recent")
@@ -202,22 +173,16 @@ def get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_cou
         print(recipe_link_path)
 
         # open each recipe and get details
-        # d = {"source": "taste"}
         d["||source||"] = "||"+"taste"+"||"
         d["||ts||"] = {"||date||": round(time())}
         d["||datePublished||"] = "||"+str(datetime.now().strftime("%Y-%m-%d"))+"||"
-
-        # name
+        d["||collectionName||"] = "||"+collection_link_path+"||"
+        #name
         name = recipe_link.find(['div'], class_="col-xs-12").h1.text
         id_count = id_count + 1
-
-
-        print("id_count " + str(id_count))
-        # d["_id"] = {"$oid": id_count}
         d["||name||"] = "||"+name+"||".replace("'", "").replace("\"", "")
 
         for recipe in recipe_link.find_all(['main'], class_="col-xs-12"):
-
             # ingredient
             for ingredient in recipe.find_all('div', class_="ingredient-description"):
                 ing = ingredient.text
@@ -232,17 +197,14 @@ def get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_cou
 
             # recipe info (cooktime, preptime, servings)
             for recipe_info_section in recipe.find_all('div', class_="cooking-info-lead-image-container col-xs-12 col-sm-8"):
-                # print(recipe_info_section)
                 for info in recipe_info_section.find_all('li'):
                     info = info.text
                     if "Cook" in info:
                         cook = re.sub("[a-zA-Z]", "", info).strip()
-                        # //"0:10"        ==> "||0:10||"      ==> '||0:10||'      --> sed '||     ||'
                         d["||cookTime||"] = "||"+cook+"||"
                     elif "Prep" in info:
                         d["||prepTime||"] = "||"+re.sub("[a-zA-Z]", "", info).strip()+"||"
                     elif "Makes" in info:
-                        # d["||recipeYield||"] = "||"+re.sub("[a-zA-Z]", "", info).strip()+"||"
                         d["||recipeYield||"] = "||"+info.strip()+"||"
                     elif "Servings" in info:
                         d["||recipeYield||"] = "||"+info.strip()+"||"
@@ -252,7 +214,6 @@ def get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_cou
             d["||image||"] = "||"+image+"||"
 
             d["||description||"] = "||"+recipe.find('div', class_="single-asset-description-block").p.text.replace("\"", "")+"||"
-            # print(d)
 
             first_run_flag = False
 
@@ -261,6 +222,19 @@ def get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_cou
                 f.write(str(d).replace("'||", "\"").replace("||'", "\"").replace("||", "").replace('\\xa0', '')+ "\n,")
 
     return id_count
+
+# uploads recipe file to mongodb
+def insert_db_recipes():
+    db = connect_db()
+    from bson import json_util
+    with open("resources/taste-recipes.json", "r", encoding='utf-8') as file:
+        for row in file:
+            try:
+                data = json_util.loads(row)
+                db.recipes.insert(data)
+            except:
+                print(row)
+    return "finished inserting"
 
 def get_ingredients():
     from json import loads
@@ -335,15 +309,11 @@ def get_ingredients():
 
 if __name__ == '__main__':
     from os.path import exists
-
     if not exists(resdir):
         makedirs(resdir)
     get_ingredient_refence()
-    # exit()
-    # insert_db_recipes()
     get_recipes()
     get_ingredients()
+    insert_db_recipes()
 
     app.run()
-
-# 1262
