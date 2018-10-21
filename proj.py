@@ -409,7 +409,7 @@ def get_recipes():
         return True
 
     if not (get_openrecipes() and get_chowdown() and get_taste()):
-        # insert_db_recipes
+        # insert_db_recipes()
         pass
 
 # ingredient scraper that looks at recipes and extract useful insight on top of indexing them for better performance
