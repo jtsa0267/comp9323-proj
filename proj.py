@@ -408,7 +408,7 @@ def get_recipes():
 
         return True
 
-    if get_openrecipes() or get_chowdown() or get_taste():
+    if not (get_openrecipes() and get_chowdown() and get_taste()):
         # insert_db_recipes
         pass
 
