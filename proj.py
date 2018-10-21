@@ -82,11 +82,74 @@ def get_collection_fields():
     return jsonify(json_docs)
 
 # Returns recipes that contains searched ingredients
-# Takes in JSON request where key1=array of ingredients
-@app.route("/cuisines", methods=['Get'])
-def search_db_cuisines():
+# Takes in JSON request where key1=array of ingredients (comma separated)
+@app.route("/categories", methods=['Get'])
+def search_db_categories():
     db = connect_db()
-    abort(400, 'API not fully implemented yet')
+
+    # write mongodb query to find all categories
+    categories = db.final_taste_recipes.distinct('collectionName');
+    for c in categories:
+        print(c)
+    # res = db.recipes.find({"collectionName": "dinner"});
+
+    # > hardcode list of generic categories e.g. dinner
+    '''
+    === Seasons ===
+    winter (winter
+    summer (summer
+    autumn (autumn
+
+    === Meals ===
+    soup  (soup
+    snack (biscuit, finger-food, nachos, quick-treats
+    lunch (lunch, salad, high-tea, sandwich, pikelet)
+    dinner (dinner, mains, pasta, snapper, slow-cooker-beef)
+    dessert (dessert, fruit, ice-cream, cake, mandarin, tiramisu, maple-syrup, salted-caramel, cheesecake, chocolate, 
+            fudge, doughnut, marshmallow, tim-tam, crepe) 
+    drinks (drinks, smoothies, pimms
+
+
+    ===event===
+    barbecue (barbecue
+    birthday (birthday
+    christmas (has collection)
+    easter (easter
+    football-finals (football-finals
+    picnic (picnic
+    pub food (has collection)
+
+
+    ===type===
+    free range (free-range
+    gluten free (has collection)
+    vegan (vegan, plant-based)
+    vegetarian (vegetarian, plant-based)
+
+    ===Cuisine===
+    Australian (fairy-bread, lamingtons
+    Chinese (chinese, chow-mein, chicken-stir-fry
+    German (schnitzel
+    Indian (indian, curries)
+    Indonesian (indonesian
+    Italian (parmigiana, lasagne, carbonara
+    Middle Eastern (has collection)
+    Mexican
+    Moroccan (moroccan
+    Philadelphia (has collection)
+    South American (has collection)
+    Spanish (chorizo
+    Vietnamese 
+    '''
+    # > return this to kai to hardocde
+
+    # hardcode map our categories to INCLUDE db's categories
+    # e.g. dinner = find_all("dinner") ---> should return Friday Night dinner, dinner day, etc
+
+    # write search functionality- find all where cuisine = ???
+    # looks at both collection names and recipe title --> need to return distinct recipes IDs to prevent duplicates
+
+    abort(400, 'Cuisines API not fully implemented yet')
 
 # Returns recipes that contains searched ingredients
 # Takes in JSON request where key1=array of ingredients
@@ -280,7 +343,7 @@ def get_recipes():
 
     get_taste()
     if get_openrecipes() or get_chowdown():
-		return
+        return
 
 def get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_count, first_run_flag):
     import re
