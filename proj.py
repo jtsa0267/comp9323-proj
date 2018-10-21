@@ -432,8 +432,6 @@ def get_ingredients():
 @app.route("/recipes", methods = ["GET"])
 @app.route("/recipes/<recipe_ids>", methods = ["GET"])
 def get_db_recipe(recipe_ids = "", page_size = 80):
-    db = connect_db()
-
     # if request.url_rule.rule == "/recipes":
     #     res = db.recipes.find()
     #     recipe_array = []
@@ -455,12 +453,10 @@ def get_db_recipe(recipe_ids = "", page_size = 80):
         from bson.objectid import ObjectId
 
         recipe_ids, db, recipes = recipe_ids.strip().split(","), connect_db(), []
-        cursor = db.recipes.find({"_id" : {"$in" : [ObjectId(ri) for ri in recipe_ids]}})
-        for line in cursor:
-            line["_id"] = str(line.pop("_id"))
-            recipes.append(line)
-            if len(recipes) == page_size:
-                break
+        cursor = db.recipes.find({"_id" : {"$in" : [ObjectId(ri) for ri in recipe_ids]}}).limit(page_size)
+        for c in cursor:
+            c["_id"] = str(c.pop("_id"))
+            recipes.append(c)
 
         return dumps({"result" : recipes, "size" : len(recipes)}), 200
     else:
@@ -524,7 +520,7 @@ def handle_users():
         lName = request.get_json()["last_name"]
         sc = db.users.insert({"email": email, "password": password, "first_name": fName, "last_name": lName})
     else:
-        #Following methods require user to be logged in
+        # Following methods require user to be logged in
         if not "email" in session:
             return dumps({"success": False, "error": "You need to be logged in first."}), 401,\
                          {"ContentType": "application/json"}
