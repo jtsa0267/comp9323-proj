@@ -436,7 +436,7 @@ def get_ingredients():
 #           http://127.0.0.1:5000/recipes/5160756d96cc62079cc2db16,chowdown0
 @app.route("/recipes", methods = ["GET"])
 @app.route("/recipes/<recipe_ids>", methods = ["GET"])
-def get_db_recipe(recipe_ids = "", page_size = 80):
+def get_db_recipe(recipe_ids = "", page_size = 80, page = 1):
     # if request.url_rule.rule == "/recipes":
     #     res = db.recipes.find()
     #     recipe_array = []
@@ -444,26 +444,33 @@ def get_db_recipe(recipe_ids = "", page_size = 80):
     #         recipe_array.append(doc)
     #     array_sanitized = loads(json_util.dumps(recipe_array))
     #     return jsonify(array_sanitized)
-    if request.url_rule.rule == "/recipes":
-        if "ingredients" not in request.args:
-            return dumps({"result" : "missing ingredients parameter"}), 400
+    l_ing = ""
+    if request.url_rule.rule == "/recipes" and "ingredients" in request.args:
         l_ing = request.args.get("ingredients")
+
     if "page_size" in request.args:
         try:
             page_size = int(request.args.get("page_size"))
         except ValueError:
             pass
+    if "page" in request.args:
+        try:
+            page = int(request.args.get("page"))
+        except ValueError:
+            pass
 
-    if recipe_ids:
+    if recipe_ids or (not l_ing and not recipe_ids):
         from bson.objectid import ObjectId
 
-        recipe_ids, db, recipes = recipe_ids.strip().split(","), connect_db(), []
-        cursor = db.recipes.find({"_id" : {"$in" : [ObjectId(ri) for ri in recipe_ids]}}).limit(page_size)
+        db, recipes = connect_db(), []
+        if recipe_ids:
+            recipe_ids = recipe_ids.strip().split(",")
+            cursor = db.recipes.find({"_id" : {"$in" : [ObjectId(ri) for ri in recipe_ids]}}).limit(page_size)
+        else:
+            cursor = db.recipes.find({}).limit(page_size)
         for doc in cursor:
             doc["_id"] = {"$oid" : str(doc.pop("_id"))}
             recipes.append(doc)
-
-        return dumps({"result" : recipes, "size" : len(recipes)}), 200
     else:
         tmp = set()
         for i, ing in enumerate(l_ing.strip().lower().split(",")):
@@ -473,9 +480,9 @@ def get_db_recipe(recipe_ids = "", page_size = 80):
             else:
                 tmp = tmp.intersection(ing_rcps[ing])
         tmp = [t for c, t in sorted([(rcp_ings[t], t) for t in tmp], key = lambda tup: tup[0])]
-        recipes = loads(get_db_recipe(",".join(tmp), page_size)[0])["result"]
+        recipes = loads(get_db_recipe(",".join(tmp), page_size, page)[0])["result"]
 
-        return dumps({"result" : recipes, "size" : len(recipes)}), 200
+    return dumps({"result" : recipes, "size" : len(recipes)}), 200
 
 # GET    - Returns recipes that are within searched category
 # e.g. http://127.0.0.1:5000/categories?category=christmas&page_size=80&page_number=2
