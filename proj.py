@@ -460,7 +460,7 @@ def get_db_recipe(recipe_ids = "", page_size = 80):
         recipe_ids, db, recipes = recipe_ids.strip().split(","), connect_db(), []
         cursor = db.recipes.find({"_id" : {"$in" : [ObjectId(ri) for ri in recipe_ids]}}).limit(page_size)
         for doc in cursor:
-            doc["_id"] = str(doc.pop("_id"))
+            doc["_id"] = {"$oid" : str(doc.pop("_id"))}
             recipes.append(doc)
 
         return dumps({"result" : recipes, "size" : len(recipes)}), 200
