@@ -600,13 +600,20 @@ def handle_favourites(recipe_id = ""):
         cursor = db.favourites.find({"email": currEmail})
         json_docs = []
 
-        for doc in cursor:
-            recipe = get_db_recipe(doc["recipe_id"])
+        for fav_doc in cursor:
+            response = get_db_recipe(fav_doc["recipe_id"])
+
+            json_response = loads(response[0])
+            print(json_response)
+            print("HAHA")
+            recipe = json_response["result"][0]
+            print(recipe)
             # json_docs.append(doc)
-            json_docs.append(recipe) #recipe["result"])
-        #return jsonify(json_docs)
-        #loads(json_util.dumps(recipe_array))
+            json_docs.append(recipe)  # recipe["result"])
+        # return jsonify(json_docs)
+        # loads(json_util.dumps(recipe_array))
         # array_sanitized = loads(json_util.dumps(json_docs))
+        # return "NO!"
         return dumps({"result" : json_docs, "size" : len(json_docs)}), 200, {"ContentType": "application/json"}
     elif request.json is None:
         abort(400, 'No valid JSON not provided')
