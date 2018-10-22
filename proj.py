@@ -265,7 +265,7 @@ def get_recipes():
                 d["||ts||"] = {"||date||": round(time())}
                 d["||datePublished||"] = "||" + str(datetime.now().strftime("%Y-%m-%d")) + "||"
                 d["||collectionName||"] = "||" + collection_link_path + "||"
-                #name
+                # name
                 name = recipe_link.find(["div"], class_ = "col-xs-12").h1.text
                 id_count = id_count + 1
                 d["||name||"] = "||" + name + "||".replace("'", "").replace("\"", "")
@@ -318,13 +318,13 @@ def get_recipes():
         for collection_page in range(1, 51):
             soup = BeautifulSoup(get("https://www.taste.com.au/recipes/collections?page=" + str(collection_page)\
                                                                                           + "&sort=recent").text, "html.parser")
-            #for each page containing recipe folders
+            # for each page containing recipe folders
             for url in soup.find_all('article'):
                 collection_link_path = url.figure.a["href"]
 
-                #opens each recipe collection eg https://www.taste.com.au/recipes/collections/indian-curry-recipes
+                # opens each recipe collection eg https://www.taste.com.au/recipes/collections/indian-curry-recipes
                 a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path).text, "html.parser")
-                #traverse each page in collection
+                # traverse each page in collection
                 if a_collection_page.find("div", class_ = "col-xs-8 pages"):
                     num_section = a_collection_page.find("div", class_ = "col-xs-8 pages")
                     for link in num_section.find_all('a'):
@@ -337,7 +337,7 @@ def get_recipes():
                                                                                          + "&q=&sort=recent").text, "html.parser")
                         id_count = get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_count, first_run_flag)
 
-                else: #there is only 1 page in collection
+                else: # there is only 1 page in collection
                     a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path).text, "html.parser")
                     id_count = get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_count, first_run_flag)
 
@@ -436,14 +436,7 @@ def get_ingredients():
 #           http://127.0.0.1:5000/recipes/5160756d96cc62079cc2db16,chowdown0
 @app.route("/recipes", methods = ["GET"])
 @app.route("/recipes/<recipe_ids>", methods = ["GET"])
-def get_db_recipe(recipe_ids = "", page_size = 80, page = 1):
-    # if request.url_rule.rule == "/recipes":
-    #     res = db.recipes.find()
-    #     recipe_array = []
-    #     for doc in res:
-    #         recipe_array.append(doc)
-    #     array_sanitized = loads(json_util.dumps(recipe_array))
-    #     return jsonify(array_sanitized)
+def get_db_recipe(recipe_ids = "", page_size = 80, page_number = 1):
     l_ing = ""
     if request.url_rule.rule == "/recipes" and "ingredients" in request.args:
         l_ing = request.args.get("ingredients")
@@ -453,21 +446,20 @@ def get_db_recipe(recipe_ids = "", page_size = 80, page = 1):
             page_size = int(request.args.get("page_size"))
         except ValueError:
             pass
-    if "page" in request.args:
+    if "page_number" in request.args:
         try:
-            page = int(request.args.get("page"))
+            page_number = int(request.args.get("page_number"))
         except ValueError:
             pass
 
     if recipe_ids or (not l_ing and not recipe_ids):
         from bson.objectid import ObjectId
 
-        db, recipes = connect_db(), []
+        db, find_filter, recipes = connect_db(), {}, []
         if recipe_ids:
             recipe_ids = recipe_ids.strip().split(",")
-            cursor = db.recipes.find({"_id" : {"$in" : [ObjectId(ri) for ri in recipe_ids]}}).limit(page_size)
-        else:
-            cursor = db.recipes.find({}).limit(page_size)
+            find_filter = {"_id" : {"$in" : [ObjectId(ri) for ri in recipe_ids]}}
+        cursor = db.recipes.find(find_filter).skip((page_number - 1) * page_size).limit(page_size)
         for doc in cursor:
             doc["_id"] = {"$oid" : str(doc.pop("_id"))}
             recipes.append(doc)
@@ -480,7 +472,7 @@ def get_db_recipe(recipe_ids = "", page_size = 80, page = 1):
             else:
                 tmp = tmp.intersection(ing_rcps[ing])
         tmp = [t for c, t in sorted([(rcp_ings[t], t) for t in tmp], key = lambda tup: tup[0])]
-        recipes = loads(get_db_recipe(",".join(tmp), page_size, page)[0])["result"]
+        recipes = loads(get_db_recipe(",".join(tmp), page_size, page_number)[0])["result"]
 
     return dumps({"result" : recipes, "size" : len(recipes)}), 200
 
@@ -638,8 +630,6 @@ if __name__ == '__main__':
              open(resdir + "rcp_ings", encoding = 'utf-8') as f2:
             ing_rcps = loads((''.join(f1.readlines())).strip())
             rcp_ings = loads((''.join(f2.readlines())).strip())
-    # exit()
 
     app.run()
     # app.run(port = "5001")
-    # testing message
