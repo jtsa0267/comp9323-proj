@@ -606,7 +606,7 @@ if __name__ == '__main__':
         makedirs(resdir)
 
     get_ingredient_refence()
-    get_recipes()
+    # get_recipes()
 
     # check if indexing files are available for ingredient scraping
     if not isfile(resdir + "ing_rcps") or not isfile(resdir + "rcp_ings"):
