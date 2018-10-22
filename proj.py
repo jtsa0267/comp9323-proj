@@ -105,8 +105,7 @@ def insert_db_recipes():
         with open(resdir + fname, encoding = 'utf-8') as f:
             for line in f.readlines():
                 try:
-                    recipe_obj = json_util.loads(line)
-                    db.recipes.insert(recipe_obj)
+                    db.recipes.insert(json_util.loads(line))
                 except:
                     pass
 
@@ -270,7 +269,7 @@ def get_recipes():
                 d["||ts||"] = {"||date||": round(time())}
                 d["||datePublished||"] = "||" + str(datetime.now().strftime("%Y-%m-%d")) + "||"
                 d["||collectionName||"] = "||" + collection_link_path + "||"
-                #name
+                # name
                 name = recipe_link.find(["div"], class_ = "col-xs-12").h1.text
                 id_count = id_count + 1
                 d["||name||"] = "||" + name + "||".replace("'", "").replace("\"", "")
@@ -323,13 +322,13 @@ def get_recipes():
         for collection_page in range(1, 51):
             soup = BeautifulSoup(get("https://www.taste.com.au/recipes/collections?page=" + str(collection_page)\
                                                                                           + "&sort=recent").text, "html.parser")
-            #for each page containing recipe folders
+            # for each page containing recipe folders
             for url in soup.find_all('article'):
                 collection_link_path = url.figure.a["href"]
 
-                #opens each recipe collection eg https://www.taste.com.au/recipes/collections/indian-curry-recipes
+                # opens each recipe collection eg https://www.taste.com.au/recipes/collections/indian-curry-recipes
                 a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path).text, "html.parser")
-                #traverse each page in collection
+                # traverse each page in collection
                 if a_collection_page.find("div", class_ = "col-xs-8 pages"):
                     num_section = a_collection_page.find("div", class_ = "col-xs-8 pages")
                     for link in num_section.find_all('a'):
@@ -342,7 +341,7 @@ def get_recipes():
                                                                                          + "&q=&sort=recent").text, "html.parser")
                         id_count = get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_count, first_run_flag)
 
-                else: #there is only 1 page in collection
+                else: # there is only 1 page in collection
                     a_collection_page = BeautifulSoup(get("https://www.taste.com.au" + collection_link_path).text, "html.parser")
                     id_count = get_taste_recipe_info(a_collection_page, collection_link_path, fname, id_count, first_run_flag)
 
@@ -385,11 +384,11 @@ def scrape_ingredients():
 
     db = connect_db()
     cursor = db.recipes.find({})
-    for k, line in enumerate(cursor):
+    for k, doc in enumerate(cursor):
         print(k)
-        recipe_id = str(line["_id"])
+        recipe_id = str(doc["_id"])
         d_rcp[recipe_id] = 0
-        for ing_str in line["ingredients"]:
+        for ing_str in doc["ingredients"]:
             ing_str = re.findall(quantity_filter, ing_str)
             if not ing_str or len(ing_str) > 1:
                 continue
@@ -441,49 +440,48 @@ def get_ingredients():
 #           http://127.0.0.1:5000/recipes/5160756d96cc62079cc2db16,chowdown0
 @app.route("/recipes", methods = ["GET"])
 @app.route("/recipes/<recipe_ids>", methods = ["GET"])
-def get_db_recipe(recipe_ids = "", page_size = 80):
-    # if request.url_rule.rule == "/recipes":
-    #     res = db.recipes.find()
-    #     recipe_array = []
-    #     for doc in res:
-    #         recipe_array.append(doc)
-    #     array_sanitized = loads(json_util.dumps(recipe_array))
-    #     return jsonify(array_sanitized)
-    if request.url_rule.rule == "/recipes":
-        if "ingredients" not in request.args:
-            return dumps({"result" : "missing ingredients parameter"}), 400
+def get_db_recipe(recipe_ids = "", page_size = 80, page_number = 1):
+    l_ing = ""
+    if request.url_rule.rule == "/recipes" and "ingredients" in request.args:
         l_ing = request.args.get("ingredients")
+
     if "page_size" in request.args:
         try:
             page_size = int(request.args.get("page_size"))
         except ValueError:
             pass
+    if "page_number" in request.args:
+        try:
+            page_number = int(request.args.get("page_number"))
+        except ValueError:
+            pass
 
-    if recipe_ids:
+    if recipe_ids or (not l_ing and not recipe_ids):
         from bson.objectid import ObjectId
 
-        recipe_ids, db, recipes = recipe_ids.strip().split(","), connect_db(), []
-        cursor = db.recipes.find({"_id" : {"$in" : [ObjectId(ri) for ri in recipe_ids]}}).limit(page_size)
-        for c in cursor:
-            c["_id"] = str(c.pop("_id"))
-            recipes.append(c)
-
-        return dumps({"result" : recipes, "size" : len(recipes)}), 200
+        db, find_filter, recipes = connect_db(), {}, []
+        if recipe_ids:
+            recipe_ids = recipe_ids.strip().split(",")
+            find_filter = {"_id" : {"$in" : [ObjectId(ri) for ri in recipe_ids]}}
+        cursor = db.recipes.find(find_filter).skip((page_number - 1) * page_size).limit(page_size)
+        for doc in cursor:
+            doc["_id"] = {"$oid" : str(doc.pop("_id"))}
+            recipes.append(doc)
     else:
         tmp = set()
         for i, ing in enumerate(l_ing.strip().lower().split(",")):
             ing = ing.strip()
             if i == 0:
-                tmp = ing_rcps[ing]
+                tmp = set(ing_rcps[ing])
             else:
                 tmp = tmp.intersection(ing_rcps[ing])
         tmp = [t for c, t in sorted([(rcp_ings[t], t) for t in tmp], key = lambda tup: tup[0])]
-        recipes = loads(get_db_recipe(",".join(tmp), page_size)[0])["result"]
+        recipes = loads(get_db_recipe(",".join(tmp), page_size, page_number)[0])["result"]
 
-        return dumps({"result" : recipes, "size" : len(recipes)}), 200
+    return dumps({"result" : recipes, "size" : len(recipes)}), 200
 
 # GET    - Returns recipes that are within searched category
-# e.g. http://127.0.0.1:5000/categories?category=christmas&page_size=20 &page_number=2
+# e.g. http://127.0.0.1:5000/categories?category=christmas&page_size=80&page_number=2
 @app.route("/categories", methods = ["GET"])
 def handle_categories():
     startRange = 0
@@ -501,20 +499,15 @@ def handle_categories():
     if "category" not in request.args:
         return dumps({"result" : "missing category parameter"}), 400
     else:
-        cat = request.args.get("category")
-        cat = cat.strip().lower()
+        cat = request.args.get("category").strip().lower()
 
-    db = connect_db()
-    recipes = []
-    regx = re.compile(cat, re.IGNORECASE)
+    db, regx = connect_db(), re.compile(cat, re.IGNORECASE)	
     count = db.recipes.find({"collectionName": regx}).count()
-    res = db.recipes.find({"collectionName": regx}).skip(startRange).limit(page_size)
-
+    res = list(db.recipes.find({"collectionName": regx}).skip(startRange).limit(page_size))
     for doc in res:
-        recipes.append(doc)
-    array_sanitized = loads(json_util.dumps(recipes))
+        doc["_id"] = {"$oid" : str(doc.pop("_id"))}
 
-    return dumps({"result" : array_sanitized, "size" : count}), 200
+    return dumps({"result" : res, "size" : count}), 200
 
 # POST    - creates new user
 # PUT     - updates user details.
@@ -633,7 +626,7 @@ if __name__ == '__main__':
         makedirs(resdir)
 
     get_ingredient_refence()
-    get_recipes()
+    # get_recipes()
 
     # check if indexing files are available for ingredient scraping
     if not isfile(resdir + "ing_rcps") or not isfile(resdir + "rcp_ings"):
@@ -643,7 +636,6 @@ if __name__ == '__main__':
              open(resdir + "rcp_ings", encoding = 'utf-8') as f2:
             ing_rcps = loads((''.join(f1.readlines())).strip())
             rcp_ings = loads((''.join(f2.readlines())).strip())
-    # exit()
 
     app.run()
     # app.run(port = "5001")
