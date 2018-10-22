@@ -468,7 +468,7 @@ def get_db_recipe(recipe_ids = "", page_size = 80, page_number = 1):
         for i, ing in enumerate(l_ing.strip().lower().split(",")):
             ing = ing.strip()
             if i == 0:
-                tmp = ing_rcps[ing]
+                tmp = set(ing_rcps[ing])
             else:
                 tmp = tmp.intersection(ing_rcps[ing])
         tmp = [t for c, t in sorted([(rcp_ings[t], t) for t in tmp], key = lambda tup: tup[0])]
