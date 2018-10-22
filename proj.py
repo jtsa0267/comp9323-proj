@@ -500,6 +500,8 @@ def handle_categories():
     db, regx = connect_db(), re.compile(cat, re.IGNORECASE)
     # print(page_size)
     res = list(db.recipes.find({"collectionName": regx}).skip(startRange).limit(page_size))
+    for doc in res:
+        doc["_id"] = {"$oid" : str(doc.pop("_id"))}
 
     return dumps({"result" : res, "size" : len(res)}), 200
 
