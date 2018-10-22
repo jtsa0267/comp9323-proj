@@ -495,20 +495,13 @@ def handle_categories():
     if "category" not in request.args:
         return dumps({"result" : "missing category parameter"}), 400
     else:
-        cat = request.args.get("category")
-        cat = cat.strip().lower()
+        cat = request.args.get("category").strip().lower()
 
-    db = connect_db()
-    recipes = []
-    regx = re.compile(cat, re.IGNORECASE)
-    print(page_size)
-    res = db.recipes.find({"collectionName": regx}).skip(startRange).limit(page_size)
+    db, regx = connect_db(), re.compile(cat, re.IGNORECASE)
+    # print(page_size)
+    res = list(db.recipes.find({"collectionName": regx}).skip(startRange).limit(page_size))
 
-    for doc in res:
-        recipes.append(doc)
-    array_sanitized = loads(json_util.dumps(recipes))
-
-    return dumps({"result" : array_sanitized, "size" : len(recipes)}), 200
+    return dumps({"result" : res, "size" : len(res)}), 200
 
 # POST    - creates new user
 # PUT     - updates user details.
