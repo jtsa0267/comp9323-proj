@@ -25,9 +25,13 @@ def greet():
 @app.route("/login", methods = ["POST"])
 def login():
     if request.method == "POST":
-        email = request.get_json()["email"]
-        password = request.get_json()["password"]
-        keepSignedIn = request.get_json()["keep_signed_in"]
+        try:
+            email = request.get_json()["email"]
+            password = request.get_json()["password"]
+            keepSignedIn = request.get_json()["keep_signed_in"]
+        except:
+            return dumps({"error": "Need: email, password, keep_signed_in"}), 401, {
+                "ContentType": "application/json"}
         if keepSignedIn:
             session.permanent = True
         else:
@@ -479,7 +483,7 @@ def get_db_recipe(recipe_ids = "", page_size = 80):
         return dumps({"result" : recipes, "size" : len(recipes)}), 200
 
 # GET    - Returns recipes that are within searched category
-# e.g. http://127.0.0.1:5000/categories?category=christmas&page_size=80&page_number=2
+# e.g. http://127.0.0.1:5000/categories?category=christmas&page_size=20 &page_number=2
 @app.route("/categories", methods = ["GET"])
 def handle_categories():
     startRange = 0
@@ -489,7 +493,7 @@ def handle_categories():
             page_size = int(request.args.get("page_size"))
         except ValueError:
             page_size = 80
-    if "page_size" in request.args:
+    if "page_number" in request.args:
         try:
             startRange = int(request.args.get("page_number")) * page_size
         except ValueError:
@@ -503,14 +507,14 @@ def handle_categories():
     db = connect_db()
     recipes = []
     regx = re.compile(cat, re.IGNORECASE)
-    print(page_size)
+    count = db.recipes.find({"collectionName": regx}).count()
     res = db.recipes.find({"collectionName": regx}).skip(startRange).limit(page_size)
 
     for doc in res:
         recipes.append(doc)
     array_sanitized = loads(json_util.dumps(recipes))
 
-    return dumps({"result" : array_sanitized, "size" : len(recipes)}), 200
+    return dumps({"result" : array_sanitized, "size" : count}), 200
 
 # POST    - creates new user
 # PUT     - updates user details.
