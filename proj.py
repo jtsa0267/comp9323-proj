@@ -40,7 +40,9 @@ def login():
         res = db.users.find_one({"email": email})
         if res and password == res["password"]:
             session["email"] = email
+
             return dumps({"success": True}), 200, {"ContentType": "application/json"}
+
     return dumps({"error": 'Wrong credentials'}), 200, {"ContentType": "application/json"}
 
 # Logs user out and redirects to homepage
@@ -70,11 +72,6 @@ def connect_db():
 @app.route("/collection-fields", methods = ["GET", "POST"])
 def get_collection_fields():
     db = connect_db()
-    # content = request.json
-    # content = jsonify({
-    #     'collection':'users',
-    #     'fields': ["email", "password"]
-    # })
     if request.json is None:
         abort(400, 'No valid JSON not provided')
     else:
@@ -89,6 +86,7 @@ def get_collection_fields():
     json_docs = []
     for doc in cursor:
         json_docs.append(doc)
+
     return jsonify(json_docs)
 
 # Returns recipes that contains searched ingredients
@@ -109,6 +107,7 @@ def insert_db_recipes():
                 except:
                     pass
 
+# Getting a list of all possible ingredients to help identifying ingredients during scraping process
 def get_ingredient_refence():
     from textblob.inflect import singularize
 
@@ -348,10 +347,9 @@ def get_recipes():
         return True
 
     if not (get_openrecipes() and get_chowdown() and get_taste()):
-        # insert_db_recipes()
-        pass
+        insert_db_recipes()
 
-# ingredient scraper that looks at recipes and extract useful insight on top of indexing them for better performance
+# Ingredient scraper that looks at recipes and extract useful insight on top of indexing them for better performance
 def scrape_ingredients():
     # from nltk.corpus import wordnet
     from textblob.inflect import singularize
@@ -434,10 +432,11 @@ def get_ingredients():
 
     return dumps({"ingredients" : sorted(tmp), "size" : len(tmp)}), 200
 
-# GET /recipes - Returns all recipes' data e.g. name, ingredients, image, etc
+# GET /recipes - Returns all queried recipes' data e.g. name, ingredients, image, etc
 # Usage eg: http://127.0.0.1:5000/recipes
 #           http://127.0.0.1:5000/recipes?ingredients=onion,carrot
 #           http://127.0.0.1:5000/recipes/5160756d96cc62079cc2db16,chowdown0
+# Prioritises recipe IDs over ingredients
 @app.route("/recipes", methods = ["GET"])
 @app.route("/recipes/<recipe_ids>", methods = ["GET"])
 def get_db_recipe(recipe_ids = "", page_size = 80, page_number = 1):
@@ -501,7 +500,7 @@ def handle_categories():
     else:
         cat = request.args.get("category").strip().lower()
 
-    db, regx = connect_db(), re.compile(cat, re.IGNORECASE)	
+    db, regx = connect_db(), re.compile(cat, re.IGNORECASE)
     count = db.recipes.find({"collectionName": regx}).count()
     res = list(db.recipes.find({"collectionName": regx}).skip(startRange).limit(page_size))
     for doc in res:
@@ -560,19 +559,7 @@ def handle_users():
             if lName:
                 query["last_name"] = lName
 
-            '''
-            query is in format of:
-             {
-                "email":email,
-                "password": password,
-                "first_name": fName,
-                "last_name": lName
-            }
-            '''
-            sc = db.users.update(
-                {"email": currEmail},
-                query
-            )
+            sc = db.users.update({"email": currEmail}, query)
     if sc:
         return dumps({"success": True}), 200, {"ContentType": "application/json"}
     else:
@@ -595,25 +582,17 @@ def handle_favourites(recipe_id = ""):
 
         for fav_doc in cursor:
             response = get_db_recipe(fav_doc["recipe_id"])
-
             json_response = loads(response[0])
-            print(json_response)
-            print("HAHA")
             recipe = json_response["result"][0]
-            print(recipe)
-            # json_docs.append(doc)
-            json_docs.append(recipe)  # recipe["result"])
-        # return jsonify(json_docs)
-        # loads(json_util.dumps(recipe_array))
-        # array_sanitized = loads(json_util.dumps(json_docs))
-        # return "NO!"
+            json_docs.append(recipe)
+
         return dumps({"result" : json_docs, "size" : len(json_docs)}), 200, {"ContentType": "application/json"}
     elif request.json is None:
         abort(400, 'No valid JSON not provided')
     elif request.method == "POST":
         recipe_id = request.get_json()['recipe_id']
         sc = db.favourites.insert({"email": currEmail, "recipe_id": recipe_id})
-    if request.method == "DELETE":
+    elif request.method == "DELETE":
         sc = db.favourites.delete_many({"email": currEmail, "recipe_id":recipe_id})
 
     if sc:
@@ -626,7 +605,7 @@ if __name__ == '__main__':
         makedirs(resdir)
 
     get_ingredient_refence()
-    # get_recipes()
+    # get_recipes() # un-comment it to rebuilt database, extremely expensive process
 
     # check if indexing files are available for ingredient scraping
     if not isfile(resdir + "ing_rcps") or not isfile(resdir + "rcp_ings"):
@@ -638,4 +617,3 @@ if __name__ == '__main__':
             rcp_ings = loads((''.join(f2.readlines())).strip())
 
     app.run()
-    # app.run(port = "5001")
