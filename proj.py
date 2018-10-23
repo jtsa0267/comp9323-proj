@@ -43,7 +43,7 @@ def login():
 
             return dumps({"success": True}), 200, {"ContentType": "application/json"}
 
-    return dumps({"error": 'Wrong credentials'}), 200, {"ContentType": "application/json"}
+    return dumps({"error": 'Wrong credentials'}), 400, {"ContentType": "application/json"}
 
 # Logs user out and redirects to homepage
 @app.route("/logout")
@@ -563,7 +563,7 @@ def handle_users():
     if sc:
         return dumps({"success": True}), 200, {"ContentType": "application/json"}
     else:
-        return dumps({"errored": "Database operation failed. Check console"}), 401, {"ContentType": "application/json"}
+        return dumps({"error": "Database operation failed. Check console"}), 401, {"ContentType": "application/json"}
 
 # GET     - returns all favourited recipes for this user
 # POST    - creates new favourite for a logged in user
@@ -598,7 +598,7 @@ def handle_favourites(recipe_id = ""):
     if sc:
         return dumps({"success": True}), 200, {"ContentType": "application/json"}
     else:
-        return dumps({"errored": "Database operation failed. Check console"}), 401, {"ContentType": "application/json"}
+        return dumps({"error": "Database operation failed. Check console"}), 401, {"ContentType": "application/json"}
 
 if __name__ == '__main__':
     if not exists(resdir):
