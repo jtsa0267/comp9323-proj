@@ -528,6 +528,8 @@ def handle_users():
         except:
             return dumps({"error": "Need: email, password, first_name, last_name"}), 401, {"ContentType": "application/json"}
         sc = db.users.insert({"email": email, "password": password, "first_name": fName, "last_name": lName})
+        session.pop("email", None)
+        session["email"] = email
     else:
         # Following methods require user to be logged in
         if not "email" in session:
